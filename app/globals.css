@@ -1,0 +1,88 @@
+@import 'tailwindcss';
+
+:root {
+  /* Light theme - Green/Blue palette */
+  --background: #ECF4E8;
+  --foreground: #2D3748;
+  --card: #FFFFFF;
+  --card-foreground: #2D3748;
+  --popover: #FFFFFF;
+  --popover-foreground: #2D3748;
+  --primary: #ABE7B2;
+  --primary-foreground: #2D3748;
+  --secondary: #CBF3BB;
+  --secondary-foreground: #2D3748;
+  --muted: #F7FAFC;
+  --muted-foreground: #718096;
+  --accent: #93BFC7;
+  --accent-foreground: #2D3748;
+  --destructive: #FC8181;
+  --destructive-foreground: #2D3748;
+  --border: #E2E8F0;
+  --input: #FFFFFF;
+  --ring: #ABE7B2;
+  --success: #ABE7B2;
+  --success-foreground: #2D3748;
+  --warning: #FBD38D;
+  --warning-foreground: #2D3748;
+  --radius: 0.5rem;
+}
+
+.dark {
+  /* Dark theme - Adjusted green/blue palette */
+  --background: #1A202C;
+  --foreground: #F7FAFC;
+  --card: #2D3748;
+  --card-foreground: #F7FAFC;
+  --popover: #2D3748;
+  --popover-foreground: #F7FAFC;
+  --primary: #ABE7B2;
+  --primary-foreground: #1A202C;
+  --secondary: #4A5568;
+  --secondary-foreground: #F7FAFC;
+  --muted: #4A5568;
+  --muted-foreground: #A0AEC0;
+  --accent: #93BFC7;
+  --accent-foreground: #1A202C;
+  --destructive: #FC8181;
+  --destructive-foreground: #F7FAFC;
+  --border: #4A5568;
+  --input: #2D3748;
+  --ring: #ABE7B2;
+  --success: #ABE7B2;
+  --success-foreground: #1A202C;
+  --warning: #FBD38D;
+  --warning-foreground: #1A202C;
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback';
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
