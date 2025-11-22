@@ -7,15 +7,23 @@ export async function POST(request: NextRequest) {
     // Get anonymous IP through SOCKS proxy
     const anonIP = await getTorIP();
 
+    // Try to get the Monero node's Tor onion address
+    const { torIntegration } = await import('@/lib/tor-integration');
+    const onionAddress = await torIntegration.getHiddenServiceHostname();
+
     // Generate anonymous session ID
     const anonId = generateAnonymousId();
 
     console.log(`🏠 [TOR CIRCUIT] User ${anonId.slice(-6)} created room with rotating IP: ${anonIP}`);
+    if (onionAddress) {
+      console.log(`🧅 [HIDDEN SERVICE] Room associated with onion address: ${onionAddress}`);
+    }
 
     // Create room with anonymous IP
     const roomData = {
       id: anonId,
-      userIP: anonIP,
+      userIP: onionAddress || anonIP, // Prefer onion address if available
+      onionAddress: onionAddress,
       createdAt: new Date(),
       participants: [],
     };

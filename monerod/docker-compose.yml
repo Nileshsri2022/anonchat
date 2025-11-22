@@ -1,0 +1,91 @@
+version: '3.5'
+
+services:
+  monerod:
+    image: ghcr.io/sethforprivacy/simple-monerod:latest
+    restart: unless-stopped
+    container_name: monerod
+    volumes:
+      - ./data/monerod-data:/home/monero/.bitmonero
+      - ./bitmonero.conf:/home/monero/.bitmonero/bitmonero.conf
+    ports:
+      - 18080:18080
+      - 18081:18081
+      - 18089:18089
+    command:
+      - "--config-file=/home/monero/.bitmonero/bitmonero.conf"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  monero-exporter:
+    image: lalanza808/exporter:latest
+    container_name: monero-exporter
+    restart: unless-stopped
+    environment:
+      - MONERO_URL=http://monerod:18081
+      - TELEMETRY_PORT=9000
+    ports:
+      - 9000:9000
+    depends_on:
+      - monerod
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - 9090:9090
+    depends_on:
+      - monero-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - 3001:3000 # Mapped to 3001 to avoid conflict with Next.js
+    depends_on:
+      - prometheus
+
+  tor:
+    image: goldy/tor-hidden-service
+    container_name: monerod-tor
+    restart: unless-stopped
+    links:
+      - monerod
+    environment:
+      MONEROD_TOR_SERVICE_HOSTS: '18080:monerod:18080,18089:monerod:18089'
+      MONEROD_TOR_SERVICE_VERSION: '3'
+    volumes:
+      - ./data/tor-keys:/var/lib/tor/hidden_service/
+
+  tor-proxy:
+    image: alpine/socat
+    container_name: tor-proxy
+    restart: unless-stopped
+    command: tcp-listen:9150,fork,reuseaddr tcp-connect:monerod-tor:9150
+    ports:
+      - 9150:9150
+    depends_on:
+      - tor
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+
+networks:
+  default:
+    name: monerod_network

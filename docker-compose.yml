@@ -1,0 +1,17 @@
+services:
+  anonchat:
+    build:
+      context: .
+      dockerfil`e: Dockerfile
+    container_name: anonchat-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - monerod_network
+
+networks:
+  monerod_network:
+    external: true
