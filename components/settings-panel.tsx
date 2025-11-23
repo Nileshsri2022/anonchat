@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { X, Trash2, Download, Shield, Bell } from 'lucide-react';
+import { TorStatus } from './tor-status';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -60,6 +61,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   <Switch defaultChecked />
                 </div>
               </div>
+
+              <TorStatus />
             </div>
 
             {/* Notifications Section */}

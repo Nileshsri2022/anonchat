@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { CheckCircle, X, AlertCircle } from 'lucide-react';
 import { parseContactQRData } from '@/lib/qr-generator';
 
-export default function AddContactPage() {
+function AddContactPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [contactData, setContactData] = useState<any>(null);
@@ -137,5 +137,13 @@ export default function AddContactPage() {
         </p>
       </Card>
     </div>
+  );
+}
+
+export default function AddContactPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <AddContactPageContent />
+    </Suspense>
   );
 }

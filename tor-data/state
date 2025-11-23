@@ -1,0 +1,42 @@
+# Tor state file last generated on 2025-11-23 02:28:26 local time
+# Other times below are in UTC
+# You *do not* need to edit this file.
+
+CircuitBuildTimeBin 1225 1
+CircuitBuildTimeBin 1265 1
+CircuitBuildTimeBin 1345 1
+CircuitBuildTimeBin 1475 1
+CircuitBuildTimeBin 1485 1
+CircuitBuildTimeBin 1525 1
+CircuitBuildTimeBin 1575 1
+CircuitBuildTimeBin 1815 1
+CircuitBuildTimeBin 1855 1
+CircuitBuildTimeBin 1865 1
+CircuitBuildTimeBin 1985 1
+CircuitBuildTimeBin 2665 1
+CircuitBuildTimeBin 2915 1
+Dormant 0
+Guard in=default rsa_id=876C7CE43774366250D3E768E690DAB9D4B5D5A3 nickname=rainbowland sampled_on=2025-11-12T18:34:07 sampled_idx=0 sampled_by=0.4.8.21 listed=1 confirmed_on=2025-11-17T11:38:21 confirmed_idx=0 pb_circ_attempts=3.000000 pb_circ_successes=3.000000 pb_successful_circuits_closed=3.000000
+Guard in=default rsa_id=923F05FE883DBC89BF111F391A882168010D165A nickname=bgprodeo sampled_on=2025-11-15T05:00:12 sampled_idx=1 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=DF119D8CEB2C6B833D097EAFCDAF2CC8B2C10C36 nickname=sipeovh2 sampled_on=2025-11-16T20:47:54 sampled_idx=2 sampled_by=0.4.8.21 listed=1 confirmed_on=2025-11-18T08:31:53 confirmed_idx=1 pb_circ_attempts=5.000000 pb_circ_successes=4.000000 pb_successful_circuits_closed=4.000000
+Guard in=default rsa_id=B9F405AA27AC3BC0794958A5E4AC7E160333BEE1 nickname=tonyyayo sampled_on=2025-11-20T14:13:12 sampled_idx=3 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=7C7862D39221B9C6785AA20A31430944D4BD54DE nickname=iamanickname sampled_on=2025-11-15T22:01:49 sampled_idx=4 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=A61231BA2DC2FA7F0AF78C3B0EE4ED2B28B7DFAA nickname=DFRI72 sampled_on=2025-11-16T10:42:23 sampled_idx=5 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=D870744F618F20F3A63592B4F9B0BB919FC1BED0 nickname=Unnamed sampled_on=2025-11-22T01:25:04 sampled_idx=6 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=E4A848533B72BCE2004CF4D32A217F109A3EF796 nickname=1blu3DEicebeer04 sampled_on=2025-11-15T08:07:40 sampled_idx=7 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=2D172A07B929FCA9CF234768FCE0938B1E7DBB47 nickname=nezupub sampled_on=2025-11-12T13:53:08 sampled_idx=8 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=F4B74A7FB0D043A76DEB479CE9F1E9F61EB616F4 nickname=Runaz sampled_on=2025-11-12T15:29:00 sampled_idx=9 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=8B9357C83188B53392187ABA63458BB767117D5D nickname=prsv sampled_on=2025-11-13T10:58:38 sampled_idx=10 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=EE315DBD29B1384C47071C9B6A72CD6481CBA086 nickname=ATP sampled_on=2025-11-11T10:24:45 sampled_idx=11 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=E09E1A570E7266E9DED42714F27D3D945D9B4EF4 nickname=Tor0x800 sampled_on=2025-11-17T03:26:06 sampled_idx=12 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=0BF39CC1A3AECCB9BAE7490915F2237C3FB8D2C4 nickname=yungmal sampled_on=2025-11-16T19:09:14 sampled_idx=13 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=790DC421467BC8F48C9B7E97D693DCB34FABEF2F nickname=NTH36R3 sampled_on=2025-11-18T16:07:26 sampled_idx=14 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=3A4E6203B16D291A7E2A2E262B062DAB70E538E1 nickname=Intrepid sampled_on=2025-11-18T07:13:33 sampled_idx=15 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=96C7F178B1531825E82122DEFBFEF16E233A9328 nickname=Assange045de2 sampled_on=2025-11-20T23:09:54 sampled_idx=16 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=D74929E4FBD30F67D227191165A49094CEF72A76 nickname=hardcode sampled_on=2025-11-18T08:22:09 sampled_idx=17 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=1C75E1F02A0A7CBB70E72D194298B3DA3A622CDF nickname=TonyI sampled_on=2025-11-13T11:25:59 sampled_idx=18 sampled_by=0.4.8.21 listed=1
+Guard in=default rsa_id=E61B6EDD8816CE37288CB1DE488790DE16B01716 nickname=relay1 sampled_on=2025-11-12T15:44:11 sampled_idx=19 sampled_by=0.4.8.21 listed=1
+LastWritten 2025-11-22 20:58:26
+MinutesSinceUserActivity 1
+TorVersion Tor 0.4.8.21 (git-add2400e16d88534)
+TotalBuildTimes 13

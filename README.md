@@ -38,15 +38,29 @@ AnonChat is a zero-storage, end-to-end encrypted messaging system that combines 
 
 ```mermaid
 graph TB
-    subgraph "Client Layer"
-        UI[React Components]
-        Hooks[Custom Hooks]
-        Crypto[Crypto Library]
+    subgraph "Electron Application"
+        subgraph "Renderer Process"
+            UI[React Components]
+            Hooks[Custom Hooks]
+            Crypto[Crypto Library]
+            TorStatus[Tor Status UI]
+        end
+
+        subgraph "Main Process"
+            ElectronMain[Electron Main]
+            TorManager[Tor Manager]
+            IPCProxy[IPC Proxy Handler]
+        end
+
+        subgraph "Embedded Tor"
+            TorBinary[Tor Binary]
+            TorCircuit[Tor Circuit]
+            TorSOCKS[SOCKS Proxy 9050]
+            TorControl[Control Port 9051]
+        end
     end
 
     subgraph "Network Layer"
-        Tor[Tor Circuit]
-        Proxy[SOCKS Proxy]
         Relay[Relay Server]
     end
 
@@ -58,9 +72,14 @@ graph TB
 
     UI --> Hooks
     Hooks --> Crypto
-    Crypto --> Tor
-    Tor --> Proxy
-    Proxy --> Relay
+    TorStatus --> IPCProxy
+    IPCProxy --> TorSOCKS
+    ElectronMain --> TorManager
+    TorManager --> TorBinary
+    TorBinary --> TorCircuit
+    TorBinary --> TorSOCKS
+    TorBinary --> TorControl
+    TorCircuit --> Relay
     Relay --> Hidden
     Hidden --> Monero
     Docker -.-> Monero
@@ -183,48 +202,182 @@ export class DoubleRatchetAlgorithm {
 }
 ```
 
-### Tor Network Integration
+### Real Tor Network Integration
+
+AnonChat now uses **embedded Tor binaries** instead of simulated proxies, providing true anonymity through the actual Tor network. The application bundles Tor executables for Windows, Linux, and macOS platforms.
+
+#### Embedded Tor Architecture
 
 ```mermaid
-graph LR
-    subgraph "Tor Setup"
-        Client[AnonChat Client]
+graph TB
+    subgraph "Electron Main Process"
+        TorMgr[Tor Manager]
+        TorProc[Tor Process]
+        IPC[IPC Handler]
+    end
+
+    subgraph "Renderer Process"
+        UI[React UI]
+        Preload[Preload Script]
+        TorAPI[TorAPI Bridge]
+    end
+
+    subgraph "Tor Network"
         TorCtl[Tor Control Port 9051]
         TorSOCKS[Tor SOCKS Port 9050]
+        Circuit[Tor Circuit]
         Exit[Exit Node]
     end
 
-    Client --> TorCtl
-    Client --> TorSOCKS
-    TorSOCKS --> Exit
+    UI --> Preload
+    Preload --> IPC
+    IPC --> TorProc
+    TorMgr --> TorProc
+    TorProc --> TorCtl
+    TorProc --> TorSOCKS
+    TorSOCKS --> Circuit
+    Circuit --> Exit
 ```
+
+#### Tor Binary Management
+
+The application includes platform-specific Tor binaries downloaded from the official Tor Project:
 
 ```javascript
-// From lib/torProxy.js
-export async function getTorIP() {
-  const maxAttempts = 5;
-  let lastError;
+// From electron/tor-manager.js
+function getTorBinaryPath() {
+  const platform = process.platform;
+  const arch = process.arch;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const proxy = await getNextProxy();
-
-      const proxyUrl = `socks5://${proxy.host}:${proxy.port}`;
-      const agent = new SocksProxyAgent(proxyUrl);
-
-      const response = await fetch('https://api.ipify.org?format=json', {
-        agent,
-        signal: controller.signal
-      });
-
-      const data = await response.json();
-      return data.ip;
-    } catch (error) {
-      // Continue to next proxy
-    }
+  let dir;
+  if (platform === 'win32') {
+    dir = 'windows';
+  } else if (platform === 'linux') {
+    dir = arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
+  } else if (platform === 'darwin') {
+    dir = arch === 'arm64' ? 'macos-arm64' : 'macos-x64';
   }
+
+  const binaryName = platform === 'win32' ? 'tor.exe' : 'tor';
+  return path.join(__dirname, 'tor', dir, binaryName);
 }
 ```
+
+#### Tor Process Lifecycle
+
+Electron automatically starts the embedded Tor process on application launch:
+
+```javascript
+// From electron/main.js
+app.whenReady().then(() => {
+  torProcess = startTor();  // Launches embedded Tor binary
+  createWindow();
+});
+
+app.on('before-quit', () => {
+  if (torProcess) {
+    torProcess.kill();  // Cleans up Tor process on exit
+  }
+});
+```
+
+### Electron Setup
+
+The application is packaged as an Electron app to enable system-level integration with Tor binaries and provide secure IPC communication.
+
+#### Security Context Isolation
+
+Electron's context isolation ensures the renderer process cannot directly access Node.js APIs:
+
+```javascript
+// From electron/main.js
+const mainWindow = new BrowserWindow({
+  width: 1200,
+  height: 800,
+  webPreferences: {
+    nodeIntegration: false,        // Disabled for security
+    contextIsolation: true,        // Enabled for isolation
+    preload: path.join(__dirname, 'preload.js')  // Secure API bridge
+  }
+});
+```
+
+#### Preload Script API Bridge
+
+The preload script exposes a secure TorAPI to the renderer process:
+
+```javascript
+// From electron/preload.js
+contextBridge.exposeInMainWorld('TorAPI', {
+  fetch: (...args) => ipcRenderer.invoke('tor-fetch', ...args)
+});
+```
+
+### Tor Routing through IPC
+
+All network requests are routed through Electron's IPC system to utilize the embedded Tor SOCKS proxy, ensuring all traffic goes through Tor circuits.
+
+#### IPC Handler Implementation
+
+The main process handles Tor-routed fetch requests:
+
+```javascript
+// From electron/ipc-proxy.js
+ipcMain.handle('tor-fetch', async (event, url) => {
+  const agent = new SocksProxyAgent('socks5://127.0.0.1:9050');
+  const res = await fetch(url, { agent });
+  return await res.text();
+});
+```
+
+#### Renderer Process Usage
+
+Components use the exposed TorAPI for anonymous requests:
+
+```typescript
+// From components/tor-status.tsx
+const testTorConnection = async () => {
+  try {
+    const response = await (window as any).TorAPI.fetch('https://check.torproject.org/api/ip');
+    const data: TorStatus = JSON.parse(response as unknown as string);
+    setResult(data);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to check Tor status');
+  }
+};
+```
+
+### Testing Tor Connectivity
+
+The application includes built-in Tor connectivity testing through the Tor Status component.
+
+#### Tor Status Component
+
+```typescript
+// From components/tor-status.tsx
+export function TorStatus() {
+  const testTorConnection = async () => {
+    const response = await (window as any).TorAPI.fetch('https://check.torproject.org/api/ip');
+    const data: TorStatus = JSON.parse(response);
+    // Returns: { IsTor: boolean, IP: string }
+  };
+}
+```
+
+#### Manual Testing Steps
+
+1. **Launch the Electron app** with embedded Tor
+2. **Navigate to Settings** and find the Tor Status section
+3. **Click "Test Tor"** to verify connectivity
+4. **Check the exit IP** to confirm traffic is routed through Tor
+5. **Verify IsTor flag** indicates successful Tor connection
+
+#### Troubleshooting Tor Issues
+
+- **Tor process not starting**: Check Tor binary permissions and platform compatibility
+- **Control port connection failed**: Verify Tor configuration and firewall settings
+- **SOCKS proxy unavailable**: Ensure Tor process is running and SOCKS port 9050 is open
+- **Circuit establishment failed**: Check network connectivity and Tor bootstrap progress
 
 ## 📦 Installation
 
@@ -233,9 +386,35 @@ export async function getTorIP() {
 - Node.js 18+
 - npm or pnpm
 - Docker and Docker Compose (for Monero integration)
-- Tor (optional, fallback proxies available)
+- **Tor binaries** (automatically downloaded, or manual setup)
 
-### Quick Start
+### Setup Instructions for Real Tor Integration
+
+#### Automatic Tor Binary Download
+
+The application includes scripts to download official Tor binaries for your platform:
+
+**Windows:**
+```batch
+download-tor-binaries.bat
+```
+
+**Linux/macOS:**
+```bash
+chmod +x download-tor-binaries.sh
+./download-tor-binaries.sh
+```
+
+This will download and extract Tor binaries to `electron/tor/` directory for:
+- Windows (x86_64)
+- Linux (x86_64, ARM64)
+- macOS (x86_64, ARM64)
+
+#### Manual Tor Setup (Alternative)
+
+If automatic download fails, you can manually download Tor expert bundles from [torproject.org](https://www.torproject.org/download/tor/) and place the `tor` executable in the appropriate `electron/tor/{platform}/` directory.
+
+#### Electron Build and Run
 
 1. **Clone the repository**
    ```bash
@@ -243,36 +422,88 @@ export async function getTorIP() {
    cd anon-chat-system-design
    ```
 
-2. **Install dependencies**
+2. **Download Tor binaries**
+   ```bash
+   # Windows
+   download-tor-binaries.bat
+
+   # Linux/macOS
+   chmod +x download-tor-binaries.sh && ./download-tor-binaries.sh
+   ```
+
+3. **Install dependencies**
    ```bash
    pnpm install
    # or
    npm install
    ```
 
-3. **Start development server**
+4. **Build the Next.js application**
    ```bash
-   pnpm dev
+   pnpm build
    # or
-   npm run dev
+   npm run build
    ```
 
-4. **Open in browser**
+5. **Install Electron dependencies**
+   ```bash
+   pnpm add -D electron electron-builder
+   # or
+   npm install -D electron electron-builder
    ```
-   http://localhost:3000
+
+6. **Start the Electron app with embedded Tor**
+   ```bash
+   pnpm electron .
+   # or
+   npx electron .
    ```
+
+The Electron app will automatically:
+- Launch the embedded Tor process
+- Start the Next.js development server (if in dev mode)
+- Route all network traffic through Tor via IPC
+
+#### Development Mode
+
+For development with hot reloading:
+
+1. **Start Next.js dev server in one terminal**
+   ```bash
+   pnpm dev
+   ```
+
+2. **Start Electron in another terminal**
+   ```bash
+   npx electron .
+   ```
+
+Electron will load `http://localhost:3000` and embed it with Tor integration.
+
+#### Verifying Tor Integration
+
+1. Launch the Electron application
+2. Navigate to Settings → Tor Status
+3. Click "Test Tor" to verify connectivity
+4. Confirm the exit IP is different from your regular IP
+5. Check that "IsTor" flag shows `true`
 
 ### Package.json Configuration
 
 ```json
 {
-  "name": "my-v0-project",
+  "name": "anonchat",
   "version": "0.1.0",
+  "main": "electron/main.js",
   "scripts": {
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "build-electron": "electron-builder",
+    "download-tor": "node scripts/download-tor.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.1.4",
@@ -284,6 +515,12 @@ export async function getTorIP() {
     "react": "19.2.0",
     "socks-proxy-agent": "^8.0.5",
     "tor-control": "^0.0.3"
+  },
+  "devDependencies": {
+    "electron": "^25.0.0",
+    "electron-builder": "^24.0.0",
+    "concurrently": "^8.0.0",
+    "wait-on": "^7.0.0"
   }
 }
 ```

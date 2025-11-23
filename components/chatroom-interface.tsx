@@ -7,6 +7,7 @@ import { Shield, Info, Users, Send, Copy, Check, QrCode } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useChatroom } from '@/hooks/use-chatroom';
 import { QRContactModal } from '@/components/qr-contact-modal';
+import { TorCircuitDebug } from '@/components/tor-circuit-debug';
 
 interface ChatroomInterfaceProps {
   roomId: string;
@@ -90,6 +91,8 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
           </Button>
         </div>
       </div>
+
+      <TorCircuitDebug />
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">

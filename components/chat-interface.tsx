@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Send, Lock, Shield, MoreVertical, Info } from 'lucide-react';
 import { EncryptionStatusBar } from './encryption-status-bar';
 import { MessageBubble } from './message-bubble';
+import { TorCircuitDebug } from './tor-circuit-debug';
 import { torIntegration } from '@/lib/tor-integration';
 
 interface ChatInterfaceProps {
@@ -103,6 +104,7 @@ export function ChatInterface({ conversationId, onOpenInfo }: ChatInterfaceProps
           torConnected={torConnected}
           messageCount={messages.filter(m => m.encrypted).length}
         />
+        <TorCircuitDebug />
       </div>
 
       {/* Messages */}
