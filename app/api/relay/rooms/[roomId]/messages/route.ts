@@ -1,4 +1,4 @@
-// API route for sending and receiving messages (mock relay for development)
+// API route for sending and receiving messages with replay protection
 import { NextRequest, NextResponse } from 'next/server';
 import { getTorIP } from '@/lib/torProxy';
 
@@ -13,7 +13,21 @@ interface StoredMessage {
   ip?: string; // Anonymous IP from SOCKS proxy
 }
 
-// In-memory storage for development (replace with Redis/database in production)
+// In-memory replay protection (3-day TTL)
+const seenMessages = new Map<string, number>(); // msgId -> expiryTimestamp
+const REPLAY_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+// Cleanup expired messages periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [msgId, expiry] of seenMessages.entries()) {
+    if (expiry < now) {
+      seenMessages.delete(msgId);
+    }
+  }
+}, 60 * 60 * 1000); // Cleanup every hour
+
+// In-memory storage for development
 const roomMessages = new Map<string, StoredMessage[]>();
 
 export async function POST(
@@ -23,6 +37,25 @@ export async function POST(
   try {
     const { roomId } = await params;
     const message: StoredMessage = await request.json();
+
+    // REPLAY PROTECTION: Check if message already seen
+    const msgId = message.id;
+    const now = Date.now();
+
+    if (seenMessages.has(msgId)) {
+      const expiry = seenMessages.get(msgId)!;
+      if (expiry > now) {
+        console.warn(`🚫 Replay attack detected: ${msgId}`);
+        return NextResponse.json(
+          { error: 'Duplicate message (replay detected)' },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Mark as seen with 3-day expiry
+    seenMessages.set(msgId, now + REPLAY_WINDOW_MS);
+    console.log(`✅ Message ${msgId.slice(0, 8)} marked as seen`);
 
 
     // Get fresh anonymous IP for each message

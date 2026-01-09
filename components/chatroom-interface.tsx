@@ -7,6 +7,7 @@ import { Shield, Info, Users, Send, Copy, Check, QrCode } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useChatroom } from '@/hooks/use-chatroom';
 import { QRContactModal } from '@/components/qr-contact-modal';
+import { TorCircuitDisplay } from '@/components/tor-circuit-display';
 
 interface ChatroomInterfaceProps {
   roomId: string;
@@ -42,6 +43,11 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
 
   return (
     <div className="flex-1 flex flex-col bg-background">
+      {/* Tor Circuit Display - Always at top */}
+      <div className="p-4 border-b border-border/50">
+        <TorCircuitDisplay />
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/20">
         <div className="flex items-center gap-3">
@@ -123,11 +129,10 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
                   </span>
                 )}
                 <div
-                  className={`px-4 py-2 rounded-2xl ${
-                    isCurrentUser
+                  className={`px-4 py-2 rounded-2xl ${isCurrentUser
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-foreground'
-                  }`}
+                    }`}
                 >
                   <p className="text-sm break-words">{msg.content}</p>
                 </div>

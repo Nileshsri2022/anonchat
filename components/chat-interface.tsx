@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Send, Lock, Shield, MoreVertical, Info } from 'lucide-react';
 import { EncryptionStatusBar } from './encryption-status-bar';
 import { MessageBubble } from './message-bubble';
+import { TorCircuitDisplay } from './tor-circuit-display';
 import { torIntegration } from '@/lib/tor-integration';
 
 interface ChatInterfaceProps {
@@ -83,8 +84,11 @@ export function ChatInterface({ conversationId, onOpenInfo }: ChatInterfaceProps
   return (
     <div className="flex-1 flex flex-col bg-background">
       {/* Header with Status */}
-      <div className="p-4 border-b border-border bg-card/50 backdrop-blur">
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-4 border-b border-border bg-card/50 backdrop-blur space-y-3">
+        {/* Tor Circuit Display */}
+        <TorCircuitDisplay />
+
+        <div className="flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-foreground">Secure Conversation</h3>
             <p className="text-xs text-muted-foreground mt-1">
