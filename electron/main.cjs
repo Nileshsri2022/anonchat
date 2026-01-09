@@ -158,18 +158,35 @@ app.whenReady().then(async () => {
 
   // IPC handler for getting Tor circuit status
   ipcMain.handle('get-tor-circuit', async () => {
-    if (torManager) {
-      const status = torManager.getStatus();
-      console.log('📊 Tor status:', status);
-      return status;
+    try {
+      // Import TorIntegration class
+      const { TorIntegration } = require(path.join(__dirname, '..', 'lib', 'tor-integration.ts'));
+      const torIntegration = new TorIntegration(9051, 9050);
+
+      const circuitInfo = await torIntegration.getCircuitInfo();
+      console.log('📊 Circuit info:', circuitInfo);
+
+      return circuitInfo;
+    } catch (error) {
+      console.error('❌ Failed to get circuit info:', error.message);
+      return null;
     }
-    return null;
   });
 
   // IPC handler for requesting new Tor circuit
   ipcMain.handle('new-tor-circuit', async () => {
-    console.log('⚠️ New circuit requires tor-control library integration');
-    return false;
+    try {
+      const { TorIntegration } = require(path.join(__dirname, '..', 'lib', 'tor-integration.ts'));
+      const torIntegration = new TorIntegration(9051, 9050);
+
+      const success = await torIntegration.requestNewCircuit();
+      console.log(success ? '✅ New circuit requested' : '❌ Failed to request new circuit');
+
+      return success;
+    } catch (error) {
+      console.error('❌ Failed to request new circuit:', error.message);
+      return false;
+    }
   });
 
   // Create window after Tor is ready

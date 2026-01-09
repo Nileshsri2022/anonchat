@@ -8,6 +8,28 @@ export interface TorStatus {
   circuitId?: string;
 }
 
+export interface CircuitHop {
+  nickname: string;
+  ip?: string;
+  country?: string;
+}
+
+export interface CircuitInfo {
+  circuitId: string;
+  hops: {
+    guard: CircuitHop | null;
+    middle: CircuitHop | null;
+    exit: CircuitHop | null;
+  };
+}
+
+interface Circuit {
+  id: string;
+  status: string;
+  path: string[];
+  metadata?: string;
+}
+
 export class TorIntegration {
   private statusCheckInterval: number = 30000; // 30 seconds
   private torControlPort: number = 9051; // Default Tor control port
@@ -70,28 +92,75 @@ export class TorIntegration {
         return;
       }
 
+      // CRITICAL: Remove ALL existing 'data' listeners AND drain the buffer
+      this.controlSocket.removeAllListeners('data');
+
+      // Pause and resume to clear any buffered data
+      this.controlSocket.pause();
+      this.controlSocket.resume();
+
       const fullCommand = command + '\r\n';
-      this.controlSocket.write(fullCommand);
       let response = '';
+      let timeoutId: NodeJS.Timeout;
+
       const onData = (data: Buffer) => {
         response += data.toString();
-        if (response.includes('\r\n')) {
+
+        // Check if response is complete
+        // Tor responses end with "250 OK\r\n" or "250 <text>\r\n"
+        // Multi-line responses use "250+" or "250-" then final "250 OK" or "250 <text>"
+        const lines = response.split('\r\n');
+
+        let isComplete = false;
+
+        // Check from the end of the response for completion markers
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const line = lines[i].trim();
+
+          // Skip empty lines
+          if (!line) continue;
+
+          // Found final status line
+          if (line === '250 OK' ||
+            (line.startsWith('250 ') && !line.startsWith('250+') && !line.startsWith('250-'))) {
+            isComplete = true;
+            break;
+          }
+
+          // Error response
+          if (line.startsWith('5') || line.startsWith('4')) {
+            isComplete = true;
+            break;
+          }
+
+          // If we hit a non-status line, keep waiting
+          if (!line.startsWith('250')) {
+            break;
+          }
+        }
+
+        if (isComplete) {
+          clearTimeout(timeoutId);
           this.controlSocket!.removeListener('data', onData);
-          const lines = response.trim().split('\r\n');
-          const statusLine = lines[0];
-          if (statusLine.startsWith('250')) {
+
+          // Check for success
+          if (response.includes('250')) {
             resolve(response);
           } else {
-            reject(new Error(`Tor command failed: ${statusLine}`));
+            const firstLine = response.split('\r\n')[0];
+            reject(new Error(`Tor command failed: ${firstLine}`));
           }
         }
       };
 
       this.controlSocket.on('data', onData);
 
-      setTimeout(() => {
+      // Write command AFTER setting up listener
+      this.controlSocket.write(fullCommand);
+
+      timeoutId = setTimeout(() => {
         this.controlSocket!.removeListener('data', onData);
-        reject(new Error('Tor command timeout'));
+        reject(new Error(`Tor control connection timeout`));
       }, 10000);
     });
   }
@@ -305,6 +374,214 @@ export class TorIntegration {
     if (this.controlSocket && !this.controlSocket.destroyed) {
       this.controlSocket.end();
       this.controlSocket = null;
+    }
+  }
+
+  /**
+   * Get current Tor circuit information (Guard → Middle → Exit)
+   * Mimics Tor Browser's circuit display
+   */
+  async getCircuitInfo(): Promise<CircuitInfo | null> {
+    try {
+      if (!this.authenticated) {
+        const connected = await this.connectTorControl();
+        if (!connected) return null;
+
+        // Authenticate (no password needed with CookieAuthentication 0)
+        try {
+          await this.sendTorCommand('AUTHENTICATE ""');
+          this.authenticated = true;
+        } catch (error) {
+          console.error('Tor authentication failed:', error);
+          return null;
+        }
+      }
+
+      // Get circuit status
+      const raw = await this.sendTorCommand('GETINFO circuit-status');
+      const circuits = this.parseCircuits(raw);
+
+      // Pick ONE usable circuit (like Tor Browser)
+      const active = circuits.find(c =>
+        c.status === 'BUILT' &&
+        !c.metadata?.includes('HS_SERVICE')
+      );
+
+      if (!active) {
+        console.log('No active BUILT circuits found');
+        return null;
+      }
+
+      console.log(`🎯 Selected circuit ${active.id} with ${active.path.length} hops`);
+      console.log(`   Fingerprints:`, active.path);
+
+      // Resolve node info for each hop SEQUENTIALLY to avoid socket buffer issues
+      const nodes: CircuitHop[] = [];
+      for (let i = 0; i < active.path.length; i++) {
+        const fp = active.path[i];
+        console.log(`   Fetching info for hop ${i + 1}: ${fp}`);
+
+        const nodeInfo = await this.getNodeInfo(fp);
+        nodes.push(nodeInfo);
+
+        // Small delay between queries to ensure socket buffer is clear
+        if (i < active.path.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      console.log(`✅ Resolved ${nodes.length} nodes:`, nodes);
+
+      const circuitInfo = {
+        circuitId: active.id,
+        hops: {
+          guard: nodes[0] ?? null,
+          middle: nodes[1] ?? null,
+          exit: nodes[2] ?? null
+        }
+      };
+
+      console.log(`📊 Final circuit info:`, circuitInfo);
+
+      return circuitInfo;
+    } catch (error) {
+      console.error('Failed to get circuit info:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Parse circuit status response from Tor
+   */
+  private parseCircuits(response: string): Circuit[] {
+    const circuits: Circuit[] = [];
+
+    console.log('📋 Raw circuit response:', response);
+
+    response.split('\r\n').forEach(line => {
+      if (!line || line.startsWith('250')) return;
+
+      const parts = line.split(' ');
+      if (parts.length < 3) return;
+
+      const id = parts[0];
+      const status = parts[1];
+      const path = parts[2];
+      const metadata = parts.slice(3).join(' ');
+
+      console.log(`🔍 Parsing circuit ${id}: status=${status}, path=${path}`);
+
+      if (status !== 'BUILT') return;
+
+      // Extract fingerprints from path (format: $FP1~name1,$FP2~name2,$FP3~name3)
+      const fingerprints = path
+        .split(',')
+        .map(n => {
+          const match = n.match(/\$([A-F0-9]+)/);
+          if (match) {
+            console.log(`  ✓ Extracted fingerprint: ${match[1]}`);
+            return match[1];
+          }
+          return null;
+        })
+        .filter(Boolean) as string[];
+
+      console.log(`  📊 Total fingerprints extracted: ${fingerprints.length}`, fingerprints);
+
+      if (fingerprints.length >= 3) {
+        circuits.push({
+          id,
+          status,
+          path: fingerprints,
+          metadata
+        });
+      } else {
+        console.warn(`  ⚠️ Circuit ${id} has only ${fingerprints.length} hops, skipping`);
+      }
+    });
+
+    console.log(`✅ Parsed ${circuits.length} BUILT circuits`);
+    return circuits;
+  }
+
+  /**
+   * Get node information (nickname, IP, country)
+   */
+  private async getNodeInfo(fingerprint: string): Promise<CircuitHop> {
+    try {
+      console.log(`      🔍 Querying Tor for fingerprint: ${fingerprint}`);
+      const response = await this.sendTorCommand(`GETINFO ns/id/${fingerprint}`);
+      console.log(`      📄 Tor response for ${fingerprint.substring(0, 8)}:`, response.substring(0, 200));
+
+      // Parse node descriptor (format: "r nickname identity published IP ORPort DirPort")
+      const line = response
+        .split('\r\n')
+        .find(l => l.startsWith('r '));
+
+      if (!line) {
+        console.warn(`      ⚠️ No 'r' line found for ${fingerprint.substring(0, 8)}`);
+        return { nickname: 'Unknown' };
+      }
+
+      console.log(`      📋 Parsing line: ${line}`);
+      const parts = line.split(' ');
+      const nickname = parts[1];
+      const ip = parts[6];
+
+      console.log(`      ✅ Extracted: nickname=${nickname}, ip=${ip}`);
+
+      let country: string | undefined;
+
+      // Get country code via GeoIP (only if IP is valid)
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+        try {
+          const geo = await this.sendTorCommand(`GETINFO ip-to-country/${ip}`);
+          const match = geo.match(/=([a-z]{2})/i);
+          if (match) {
+            country = match[1].toUpperCase();
+            console.log(`      🌍 Country: ${country}`);
+          }
+        } catch (error) {
+          // GeoIP might not be available, that's okay
+          console.log(`      ⚠️ GeoIP not available for ${ip}`);
+        }
+      }
+
+      return { nickname, ip, country };
+    } catch (error) {
+      console.error(`Failed to get node info for ${fingerprint}:`, error);
+      return { nickname: 'Unknown' };
+    }
+  }
+
+  /**
+   * Request a new Tor circuit (NEWNYM signal)
+   */
+  async requestNewCircuit(): Promise<boolean> {
+    try {
+      if (!this.authenticated) {
+        const connected = await this.connectTorControl();
+        if (!connected) return false;
+
+        try {
+          await this.sendTorCommand('AUTHENTICATE ""');
+          this.authenticated = true;
+        } catch (error) {
+          console.error('Tor authentication failed:', error);
+          return false;
+        }
+      }
+
+      await this.sendTorCommand('SIGNAL NEWNYM');
+      console.log('✅ Requested new Tor circuit (NEWNYM)');
+
+      // Wait for circuit to establish
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      return true;
+    } catch (error) {
+      console.error('Failed to request new circuit:', error);
+      return false;
     }
   }
 }

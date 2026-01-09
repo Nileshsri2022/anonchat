@@ -1,24 +1,38 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Shield, Globe, Lock } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import { RefreshCw, Shield, Circle, Lock } from 'lucide-react';
 
-interface TorCircuitInfo {
-    exitIP: string;
+interface CircuitHop {
+    nickname: string;
+    ip?: string;
     country?: string;
-    circuitPath?: string[];
-    isConnected: boolean;
+}
+
+interface CircuitInfo {
+    circuitId: string;
+    hops: {
+        guard: CircuitHop | null;
+        middle: CircuitHop | null;
+        exit: CircuitHop | null;
+    };
 }
 
 export function TorCircuitDisplay() {
-    const [circuit, setCircuit] = useState<TorCircuitInfo>({
-        exitIP: 'Checking...',
-        isConnected: false
-    });
+    const [circuit, setCircuit] = useState<CircuitInfo | null>(null);
     const [loading, setLoading] = useState(false);
     const [isElectron, setIsElectron] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [isOpen, setIsOpen] = useState(false);
+    const [exitIP, setExitIP] = useState<string>('...');
 
     useEffect(() => {
         // Check if running in Electron
@@ -34,31 +48,34 @@ export function TorCircuitDisplay() {
 
     const fetchCircuitInfo = async () => {
         try {
+            setError(null);
+
             if (typeof window !== 'undefined' && (window as any).TorAPI) {
-                // Electron: Use TorAPI
-                const response = await (window as any).TorAPI.fetch('https://check.torproject.org/api/ip');
-                const data = JSON.parse(response);
+                // Electron: Get circuit info from Tor control port
+                const circuitData = await (window as any).TorAPI.getTorCircuit();
 
-                setCircuit({
-                    exitIP: data.IP || 'Unknown',
-                    isConnected: data.IsTor || false
-                });
+                if (circuitData) {
+                    setCircuit(circuitData);
+                    // Set exit IP for compact display
+                    if (circuitData.hops.exit?.ip) {
+                        setExitIP(circuitData.hops.exit.ip);
+                    }
+                } else {
+                    setError('No active circuit');
+                }
             } else {
-                // Browser: Fetch from API (fixed path)
-                const response = await fetch('/api/tor-ip');
-                const data = await response.json();
-
-                setCircuit({
-                    exitIP: data.ip || 'Unknown',
-                    isConnected: data.isTor || false
-                });
+                // Browser: Fetch IP from API
+                try {
+                    const response = await fetch('/api/tor-ip');
+                    const data = await response.json();
+                    setExitIP(data.ip || 'Unknown');
+                } catch (err) {
+                    setExitIP('Unknown');
+                }
             }
-        } catch (error) {
-            console.error('Failed to fetch circuit info:', error);
-            setCircuit({
-                exitIP: 'Error',
-                isConnected: false
-            });
+        } catch (err) {
+            console.error('Failed to fetch circuit info:', err);
+            setError('Failed to fetch circuit');
         }
     };
 
@@ -66,56 +83,170 @@ export function TorCircuitDisplay() {
         setLoading(true);
         try {
             if (typeof window !== 'undefined' && (window as any).TorAPI) {
-                // Electron: Request new circuit
-                await (window as any).TorAPI.newTorCircuit();
-                // Wait for circuit to establish
-                setTimeout(fetchCircuitInfo, 2000);
-            } else {
-                // Browser: Not supported
-                console.warn('Circuit rotation only available in Electron');
+                const success = await (window as any).TorAPI.newTorCircuit();
+
+                if (success) {
+                    // Wait for new circuit to establish
+                    setTimeout(fetchCircuitInfo, 3000);
+                } else {
+                    setError('Failed to create new circuit');
+                }
             }
-        } catch (error) {
-            console.error('Failed to create new circuit:', error);
+        } catch (err) {
+            console.error('Failed to create new circuit:', err);
+            setError('Failed to create new circuit');
         } finally {
             setLoading(false);
         }
     };
 
-    return (
-        <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="p-3">
-                <div className="flex items-center justify-between gap-3">
-                    {/* Status Indicator */}
-                    <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${circuit.isConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
-                        <Shield className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-medium">Tor Circuit</span>
-                    </div>
+    // Compact button display
+    const CompactButton = () => (
+        <button
+            onClick={() => setIsOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-sm"
+        >
+            <Shield className="w-4 h-4 text-primary" />
+            <span className="font-medium">Tor Circuit</span>
+            <Lock className="w-3 h-3 text-green-500" />
+            <span className="font-mono text-xs text-muted-foreground">{exitIP}</span>
+        </button>
+    );
 
-                    {/* Exit IP Display */}
-                    <div className="flex items-center gap-2 px-3 py-1 bg-background/50 rounded-md">
-                        <Globe className="w-3 h-3 text-muted-foreground" />
-                        <span className="text-xs font-mono">{circuit.exitIP}</span>
-                        {circuit.isConnected && (
-                            <Lock className="w-3 h-3 text-green-500" />
-                        )}
-                    </div>
+    // Full circuit modal
+    const CircuitModal = () => (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Shield className="w-5 h-5 text-primary" />
+                        Tor Circuit
+                    </DialogTitle>
+                </DialogHeader>
 
-                    {/* New Circuit Button */}
-                    {isElectron && (
+                {!isElectron ? (
+                    <div className="py-4 text-center text-muted-foreground">
+                        <p>Circuit details only available in Electron app</p>
+                        <p className="text-sm mt-2">Current IP: {exitIP}</p>
+                    </div>
+                ) : error || !circuit ? (
+                    <div className="py-4 space-y-3">
+                        <p className="text-sm text-muted-foreground text-center">
+                            {error || 'Loading circuit...'}
+                        </p>
                         <Button
-                            size="sm"
+                            onClick={fetchCircuitInfo}
+                            className="w-full"
                             variant="outline"
+                        >
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Retry
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {/* Circuit Path */}
+                        <div className="space-y-2">
+                            {/* This browser */}
+                            <div className="flex items-start gap-2 py-1">
+                                <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
+                                <span className="text-sm text-muted-foreground">This browser</span>
+                            </div>
+
+                            {/* Guard Node */}
+                            {circuit.hops.guard && (
+                                <div className="flex items-start gap-2 py-1">
+                                    <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-medium">
+                                                {circuit.hops.guard.country || 'Unknown'}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground font-mono">
+                                                {circuit.hops.guard.ip}
+                                            </span>
+                                            <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                                                Guard
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {circuit.hops.guard.nickname}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Middle Node */}
+                            {circuit.hops.middle && (
+                                <div className="flex items-start gap-2 py-1">
+                                    <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-medium">
+                                                {circuit.hops.middle.country || 'Unknown'}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground font-mono">
+                                                {circuit.hops.middle.ip}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {circuit.hops.middle.nickname}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Exit Node */}
+                            {circuit.hops.exit && (
+                                <div className="flex items-start gap-2 py-1">
+                                    <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-medium">
+                                                {circuit.hops.exit.country || 'Unknown'}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground font-mono">
+                                                {circuit.hops.exit.ip}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {circuit.hops.exit.nickname}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Destination */}
+                            <div className="flex items-start gap-2 py-1">
+                                <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
+                                <span className="text-sm text-muted-foreground">Internet</span>
+                            </div>
+                        </div>
+
+                        {/* New Circuit Button */}
+                        <Button
                             onClick={newCircuit}
                             disabled={loading}
-                            className="h-7 px-2 text-xs"
+                            className="w-full"
                         >
-                            <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
-                            New Circuit
+                            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                            New Circuit for this Site
                         </Button>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
+
+                        {/* Info Text */}
+                        <p className="text-xs text-muted-foreground text-center">
+                            Your <span className="font-semibold text-purple-600 dark:text-purple-400">Guard</span> node may not change.
+                        </p>
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+
+    return (
+        <>
+            <CompactButton />
+            <CircuitModal />
+        </>
     );
 }
