@@ -616,21 +616,46 @@ export class TorIntegration {
 
 export const torIntegration = new TorIntegration();
 
+// Cache for exit IP to avoid hammering Tor control port
+let cachedExitIP: string | null = null;
+let cacheExpiry = 0;
+let isRefreshing = false;
+const CACHE_TTL = 30000; // 30 seconds
+
 /**
- * Get current Tor exit IP or return a placeholder if Tor is not available
- * Used by API routes for anonymous IP tracking
+ * Get current Tor exit IP from circuit info (matches circuit display)
+ * Uses caching to avoid control port timeout issues
  */
 export async function getTorIP(): Promise<string> {
+  const now = Date.now();
+
+  // Return cached IP if still valid
+  if (cachedExitIP && cacheExpiry > now) {
+    return cachedExitIP;
+  }
+
+  // Prevent concurrent refresh attempts
+  if (isRefreshing) {
+    return cachedExitIP || 'tor-cached';
+  }
+
+  isRefreshing = true;
+
   try {
-    // Try to get actual Tor IP through external service
-    const response = await fetch('https://api.ipify.org?format=json', {
-      signal: AbortSignal.timeout(5000),
-    });
-    const data = await response.json();
-    return data.ip || 'tor-anonymous';
-  } catch {
+    // Get exit IP directly from current circuit
+    const circuitInfo = await torIntegration.getCircuitInfo();
+    if (circuitInfo?.hops.exit?.ip) {
+      cachedExitIP = circuitInfo.hops.exit.ip;
+      cacheExpiry = now + CACHE_TTL;
+      return cachedExitIP;
+    }
     // Fallback: return anonymous placeholder
-    return `tor-${Math.random().toString(36).substring(2, 8)}`;
+    return cachedExitIP || `tor-${Math.random().toString(36).substring(2, 8)}`;
+  } catch {
+    // Silently fallback
+    return cachedExitIP || `tor-${Math.random().toString(36).substring(2, 8)}`;
+  } finally {
+    isRefreshing = false;
   }
 }
 

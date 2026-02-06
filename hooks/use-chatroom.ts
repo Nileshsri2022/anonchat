@@ -13,6 +13,7 @@ export interface Message {
   timestamp: Date;
   encrypted: boolean;
   ip?: string; // Anonymous IP from SOCKS proxy
+  expiresAt?: number; // For disappearing messages
 }
 
 export interface RoomUser {
@@ -39,6 +40,7 @@ export function useChatroom(roomId: string, roomName: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<RoomUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [messageTTL, setMessageTTL] = useState(0); // 0 = off, or ms until expiry
   const [currentUser] = useState(() => ({
     id: `user_${Math.random().toString(36).substr(2, 9)}`,
     username: localStorage.getItem('anonchat_username') || `User${Math.floor(Math.random() * 9999)}`,
@@ -52,7 +54,7 @@ export function useChatroom(roomId: string, roomName: string) {
       try {
         // Derive room key
         await roomEncryption.deriveRoomKey(roomId, 'shared-secret');
-        
+
         // Join room
         const joinResult = await relayAPI.joinRoom(roomId, currentUser.id, currentUser.username);
 
@@ -66,7 +68,7 @@ export function useChatroom(roomId: string, roomName: string) {
           ip: joinResult.userIP,
         };
         setUsers([newUser]);
-        
+
         // Welcome message
         setMessages([{
           id: 'sys_welcome',
@@ -97,6 +99,22 @@ export function useChatroom(roomId: string, roomName: string) {
       relayAPI.leaveRoom(roomId, currentUser.id);
     };
   }, [roomId, roomName, currentUser.id, currentUser.username, currentUser.color]);
+
+  // Clean up expired disappearing messages from local state
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      setMessages(prev => {
+        const filtered = prev.filter(msg => !msg.expiresAt || msg.expiresAt > now);
+        if (filtered.length !== prev.length) {
+          console.log(`🗑️ Cleaned ${prev.length - filtered.length} expired message(s) from UI`);
+        }
+        return filtered.length !== prev.length ? filtered : prev;
+      });
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
 
   // Start polling
   useEffect(() => {
@@ -164,14 +182,16 @@ export function useChatroom(roomId: string, roomName: string) {
     try {
       const encrypted = await roomEncryption.encrypt(content.trim());
 
+      const now = Date.now();
       const relayMessage: RelayMessage = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `msg_${now}_${Math.random().toString(36).substr(2, 9)}`,
         roomId,
         userId: currentUser.id,
         username: currentUser.username,
         encryptedContent: encrypted.ciphertext,
         iv: encrypted.iv,
-        timestamp: Date.now(),
+        timestamp: now,
+        ...(messageTTL > 0 && { expiresAt: now + messageTTL }),
       };
 
       const sendResult = await relayAPI.sendMessage(relayMessage);
@@ -184,13 +204,14 @@ export function useChatroom(roomId: string, roomName: string) {
         timestamp: new Date(),
         encrypted: true,
         ip: sendResult.sentFrom,
+        ...(messageTTL > 0 && { expiresAt: now + messageTTL }),
       };
 
       setMessages(prev => [...prev, newMessage]);
       lastMessageIdRef.current = relayMessage.id;
     } catch (error) {
       console.error('[v0] Send error:', error);
-      
+
       setMessages(prev => [...prev, {
         id: `error_${Date.now()}`,
         userId: 'system',
@@ -200,7 +221,7 @@ export function useChatroom(roomId: string, roomName: string) {
         encrypted: false,
       }]);
     }
-  }, [isConnected, roomId, currentUser.id, currentUser.username]);
+  }, [isConnected, roomId, currentUser.id, currentUser.username, messageTTL]);
 
   return {
     messages,
@@ -208,5 +229,7 @@ export function useChatroom(roomId: string, roomName: string) {
     currentUser,
     isConnected,
     sendMessage,
+    messageTTL,
+    setMessageTTL,
   };
 }

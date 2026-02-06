@@ -26,6 +26,52 @@ interface CircuitInfo {
     };
 }
 
+// Country name to flag emoji mapping
+const countryFlags: Record<string, string> = {
+    'Germany': '🇩🇪',
+    'France': '🇫🇷',
+    'The Netherlands': '🇳🇱',
+    'Netherlands': '🇳🇱',
+    'United States': '🇺🇸',
+    'United Kingdom': '🇬🇧',
+    'Finland': '🇫🇮',
+    'Sweden': '🇸🇪',
+    'Switzerland': '🇨🇭',
+    'Canada': '🇨🇦',
+    'Romania': '🇷🇴',
+    'Luxembourg': '🇱🇺',
+    'Iceland': '🇮🇸',
+    'Norway': '🇳🇴',
+    'Austria': '🇦🇹',
+    'Belgium': '🇧🇪',
+    'Denmark': '🇩🇰',
+    'Spain': '🇪🇸',
+    'Italy': '🇮🇹',
+    'Poland': '🇵🇱',
+    'Czech Republic': '🇨🇿',
+    'Czechia': '🇨🇿',
+    'Ireland': '🇮🇪',
+    'Portugal': '🇵🇹',
+    'Japan': '🇯🇵',
+    'Singapore': '🇸🇬',
+    'Australia': '🇦🇺',
+    'Brazil': '🇧🇷',
+    'Russia': '🇷🇺',
+    'Ukraine': '🇺🇦',
+    'Bulgaria': '🇧🇬',
+    'Hungary': '🇭🇺',
+    'Moldova': '🇲🇩',
+    'Latvia': '🇱🇻',
+    'Lithuania': '🇱🇹',
+    'Estonia': '🇪🇪',
+    'Unknown': '🌐',
+};
+
+function getCountryFlag(country?: string): string {
+    if (!country) return '🌐';
+    return countryFlags[country] || '🌐';
+}
+
 export function TorCircuitDisplay() {
     const [circuit, setCircuit] = useState<CircuitInfo | null>(null);
     const [loading, setLoading] = useState(false);
@@ -159,8 +205,8 @@ export function TorCircuitDisplay() {
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-medium">
-                                                {circuit.hops.guard.country || 'Unknown'}
+                                            <span className="text-lg" title={circuit.hops.guard.country}>
+                                                {getCountryFlag(circuit.hops.guard.country)}
                                             </span>
                                             <span className="text-xs text-muted-foreground font-mono">
                                                 {circuit.hops.guard.ip}
@@ -182,8 +228,8 @@ export function TorCircuitDisplay() {
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-medium">
-                                                {circuit.hops.middle.country || 'Unknown'}
+                                            <span className="text-lg" title={circuit.hops.middle.country}>
+                                                {getCountryFlag(circuit.hops.middle.country)}
                                             </span>
                                             <span className="text-xs text-muted-foreground font-mono">
                                                 {circuit.hops.middle.ip}
@@ -202,8 +248,8 @@ export function TorCircuitDisplay() {
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-medium">
-                                                {circuit.hops.exit.country || 'Unknown'}
+                                            <span className="text-lg" title={circuit.hops.exit.country}>
+                                                {getCountryFlag(circuit.hops.exit.country)}
                                             </span>
                                             <span className="text-xs text-muted-foreground font-mono">
                                                 {circuit.hops.exit.ip}

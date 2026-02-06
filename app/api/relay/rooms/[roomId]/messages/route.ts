@@ -11,21 +11,45 @@ interface StoredMessage {
   iv: string;
   timestamp: number;
   ip?: string; // Anonymous IP from SOCKS proxy
+  expiresAt?: number; // Timestamp when message should auto-delete (disappearing messages)
 }
 
 // In-memory replay protection (3-day TTL)
 const seenMessages = new Map<string, number>(); // msgId -> expiryTimestamp
 const REPLAY_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
+// Default disappearing message TTL options (in milliseconds)
+export const MESSAGE_TTL_OPTIONS = {
+  OFF: 0,
+  '30_SECONDS': 30 * 1000,
+  '5_MINUTES': 5 * 60 * 1000,
+  '1_HOUR': 60 * 60 * 1000,
+  '24_HOURS': 24 * 60 * 60 * 1000,
+};
+
 // Cleanup expired messages periodically
 setInterval(() => {
   const now = Date.now();
+
+  // Cleanup replay protection
   for (const [msgId, expiry] of seenMessages.entries()) {
     if (expiry < now) {
       seenMessages.delete(msgId);
     }
   }
-}, 60 * 60 * 1000); // Cleanup every hour
+
+  // Cleanup expired disappearing messages
+  for (const [roomId, messages] of roomMessages.entries()) {
+    const activeMessages = messages.filter(msg => {
+      if (msg.expiresAt && msg.expiresAt < now) {
+        console.log(`🗑️ Auto-deleted expired message ${msg.id.slice(0, 8)}`);
+        return false;
+      }
+      return true;
+    });
+    roomMessages.set(roomId, activeMessages);
+  }
+}, 10 * 1000); // Check every 10 seconds for disappearing messages
 
 // In-memory storage for development
 const roomMessages = new Map<string, StoredMessage[]>();
@@ -57,6 +81,11 @@ export async function POST(
     seenMessages.set(msgId, now + REPLAY_WINDOW_MS);
     console.log(`✅ Message ${msgId.slice(0, 8)} marked as seen`);
 
+    // Log disappearing message info
+    if (message.expiresAt) {
+      const ttlSeconds = Math.round((message.expiresAt - now) / 1000);
+      console.log(`⏱️ Disappearing message: will auto-delete in ${ttlSeconds}s (at ${new Date(message.expiresAt).toLocaleTimeString()})`);
+    }
 
     // Get fresh anonymous IP for each message
     const anonIP = await getTorIP();
@@ -68,11 +97,12 @@ export async function POST(
       roomMessages.set(roomId, []);
     }
 
-    // Store message with anonymous IP
+    // Store message with anonymous IP (preserve expiresAt!)
     const messages = roomMessages.get(roomId)!;
     messages.push({
       ...message,
-      ip: anonIP
+      ip: anonIP,
+      expiresAt: message.expiresAt, // Explicitly preserve expiresAt
     });
 
     // Keep only last 100 messages per room
@@ -104,13 +134,15 @@ export async function GET(
     const afterId = searchParams.get('after');
 
     const messages = roomMessages.get(roomId) || [];
+    const now = Date.now();
 
-    // Filter messages after the specified ID
-    let filteredMessages = messages;
+    // Filter out expired messages and messages after the specified ID
+    let filteredMessages = messages.filter(msg => !msg.expiresAt || msg.expiresAt > now);
+
     if (afterId) {
-      const afterIndex = messages.findIndex(m => m.id === afterId);
+      const afterIndex = filteredMessages.findIndex(m => m.id === afterId);
       if (afterIndex !== -1) {
-        filteredMessages = messages.slice(afterIndex + 1);
+        filteredMessages = filteredMessages.slice(afterIndex + 1);
       }
     }
 

@@ -11,6 +11,7 @@ export interface RelayMessage {
   iv: string;
   timestamp: number;
   ip?: string; // Anonymous IP from SOCKS proxy
+  expiresAt?: number; // Timestamp when message should auto-delete
 }
 
 export interface RoomInfo {
@@ -65,13 +66,13 @@ class RelayAPI {
   async pollMessages(roomId: string, lastMessageId?: string): Promise<RelayMessage[]> {
     try {
       let url = `${this.baseUrl}/rooms/${roomId}/messages`;
-      
+
       if (lastMessageId) {
         url = `${url}?after=${encodeURIComponent(lastMessageId)}`;
       }
 
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         return [];
       }
@@ -94,7 +95,7 @@ class RelayAPI {
 
     const poll = async () => {
       const messages = await this.pollMessages(roomId, currentLastId);
-      
+
       if (messages.length > 0) {
         onNewMessages(messages);
         currentLastId = messages[messages.length - 1].id;
@@ -133,7 +134,7 @@ class RelayAPI {
     try {
       const url = `${this.baseUrl}/rooms/${roomId}`;
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         return null;
       }

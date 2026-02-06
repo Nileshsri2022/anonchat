@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Shield, Info, Users, Send, Copy, Check, QrCode } from 'lucide-react';
+import { Shield, Info, Users, Send, Copy, Check, QrCode, Timer } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useChatroom } from '@/hooks/use-chatroom';
 import { QRContactModal } from '@/components/qr-contact-modal';
 import { TorCircuitDisplay } from '@/components/tor-circuit-display';
+import { TorStatusIndicator } from '@/components/tor-status-indicator';
 
 interface ChatroomInterfaceProps {
   roomId: string;
@@ -22,7 +23,7 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
   const [showQRModal, setShowQRModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, users, currentUser, isConnected, sendMessage } = useChatroom(roomId, roomName);
+  const { messages, users, currentUser, isConnected, sendMessage, messageTTL, setMessageTTL } = useChatroom(roomId, roomName);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,6 +77,7 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <TorStatusIndicator />
           <Badge variant="secondary" className="gap-1">
             <Shield className="w-3 h-3" />
             E2E Encrypted
@@ -130,8 +132,8 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
                 )}
                 <div
                   className={`px-4 py-2 rounded-2xl ${isCurrentUser
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-foreground'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-foreground'
                     }`}
                 >
                   <p className="text-sm break-words">{msg.content}</p>
@@ -164,13 +166,30 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
             className="flex-1"
             disabled={!isConnected}
           />
+          <select
+            value={messageTTL}
+            onChange={(e) => setMessageTTL(Number(e.target.value))}
+            className="px-2 py-1 text-xs rounded-md border border-border bg-background"
+            title="Disappearing messages"
+          >
+            <option value={0}>∞ Off</option>
+            <option value={30000}>30s</option>
+            <option value={300000}>5m</option>
+            <option value={3600000}>1h</option>
+            <option value={86400000}>24h</option>
+          </select>
           <Button onClick={handleSendMessage} disabled={!message.trim() || !isConnected}>
             <Send className="w-4 h-4" />
           </Button>
         </div>
         <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
           <Shield className="w-3 h-3" />
-          Messages encrypted with AES-256-GCM • Routed via Tor network
+          Messages encrypted with AES-256-GCM • Routed via Tor
+          {messageTTL > 0 && (
+            <>
+              {' '}• <Timer className="w-3 h-3" /> Disappearing in {messageTTL / 1000}s
+            </>
+          )}
         </p>
       </div>
 
