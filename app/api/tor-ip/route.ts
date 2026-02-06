@@ -1,6 +1,6 @@
 // API route to get current Tor IP
 import { NextRequest, NextResponse } from 'next/server';
-import { getTorIP } from '@/lib/torProxy';
+import { getTorIP } from '@/lib/tor-integration';
 
 export async function GET(request: NextRequest) {
     try {

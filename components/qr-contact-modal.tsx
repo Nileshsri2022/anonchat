@@ -66,11 +66,11 @@ export function QRContactModal({
 
       const qrData = generateContactQRData(identityPublic, preKeyPublic, 1);
       const encoded = encodeContactQR(qrData);
-  
+
       console.log('📱 QR Code Generated for Contact:', qrData.id);
       console.log('🔑 Identity Key (first 20 chars):', identityPublic.substring(0, 20) + '...');
       console.log('🔑 Pre-Key (first 20 chars):', preKeyPublic.substring(0, 20) + '...');
-  
+
       setContactData(qrData);
       setSessionId(qrData.id);
       const qrSvg = await generateQRCodeSVG(encoded, 280);
@@ -96,7 +96,7 @@ export function QRContactModal({
       setScannedData(text);
       const parsed = parseContactQRData(text);
       setParseError('');
-      
+
       if (onAddContact) {
         onAddContact(parsed);
       }
@@ -115,7 +115,7 @@ export function QRContactModal({
           const parsed = parseContactQRData(text);
           setScannedData(text);
           setParseError('');
-          
+
           if (onAddContact) {
             onAddContact(parsed);
           }
@@ -148,21 +148,19 @@ export function QRContactModal({
           <div className="flex gap-2 mb-6 border-b border-border">
             <button
               onClick={() => setMode('generate')}
-              className={`px-4 py-3 font-medium text-sm border-b-2 transition ${
-                mode === 'generate'
+              className={`px-4 py-3 font-medium text-sm border-b-2 transition ${mode === 'generate'
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Share QR Code
             </button>
             <button
               onClick={() => setMode('scan')}
-              className={`px-4 py-3 font-medium text-sm border-b-2 transition ${
-                mode === 'scan'
+              className={`px-4 py-3 font-medium text-sm border-b-2 transition ${mode === 'scan'
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Scan QR Code
             </button>
@@ -174,6 +172,7 @@ export function QRContactModal({
               <div className="p-8 bg-muted/30 rounded-lg flex justify-center">
                 {qrImage ? (
                   <div className="flex flex-col items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={qrImage || "/placeholder.svg"}
                       alt="QR Code"

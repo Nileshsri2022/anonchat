@@ -1,8 +1,188 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
+const net = require('net');
 const fetch = require('node-fetch');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const TorManager = require('./tor-manager.cjs');
+
+// Tor control port helper - sends authenticated command
+function sendTorCommand(command) {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let response = '';
+    let authenticated = false;
+    let resolved = false;
+
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        socket.destroy();
+      }
+    };
+
+    socket.connect(9051, '127.0.0.1');
+
+    socket.on('connect', () => {
+      // First authenticate
+      socket.write('AUTHENTICATE ""\r\n');
+    });
+
+    socket.on('data', (data) => {
+      response += data.toString();
+
+      if (!authenticated) {
+        // Check if authentication succeeded
+        if (response.includes('250 OK')) {
+          authenticated = true;
+          response = ''; // Clear auth response
+          // Now send the actual command
+          socket.write(command + '\r\n');
+        } else if (response.includes('515') || response.includes('514')) {
+          cleanup();
+          reject(new Error('Authentication failed: ' + response));
+        }
+      } else {
+        // Check if command response is complete
+        if (response.includes('250 OK') || response.includes('250-') || response.includes('.\r\n')) {
+          if (!resolved) {
+            resolved = true;
+            socket.end();
+            resolve(response);
+          }
+        }
+      }
+    });
+
+    socket.on('error', (err) => {
+      cleanup();
+      reject(err);
+    });
+
+    socket.on('close', () => {
+      if (!resolved) {
+        resolved = true;
+        if (response && authenticated) {
+          resolve(response);
+        } else if (!authenticated) {
+          reject(new Error('Auth failed before close'));
+        } else {
+          reject(new Error('Connection closed'));
+        }
+      }
+    });
+
+    socket.setTimeout(5000, () => {
+      cleanup();
+      reject(new Error('Timeout'));
+    });
+  });
+}
+
+// GeoIP lookup to get country for an IP (uses direct HTTP, not proxied)
+function getCountry(ip) {
+  return new Promise((resolve) => {
+    const http = require('http');
+    const req = http.get(`http://ip-api.com/json/${ip}?fields=country`, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          resolve(json.country || 'Unknown');
+        } catch {
+          resolve('Unknown');
+        }
+      });
+    });
+    req.on('error', () => resolve('Unknown'));
+    req.setTimeout(3000, () => {
+      req.destroy();
+      resolve('Unknown');
+    });
+  });
+}
+
+async function getCircuitInfo() {
+  try {
+    // Get circuit status (sendTorCommand handles authentication)
+    const response = await sendTorCommand('GETINFO circuit-status');
+    console.log('📡 Circuit response length:', response.length);
+    console.log('📡 Circuit response (first 500 chars):', response.substring(0, 500));
+
+    // Parse circuits
+    const lines = response.split('\r\n');
+    let circuitLine = null;
+
+    for (const line of lines) {
+      console.log('  Line:', line.substring(0, 80));
+      if (line.includes('BUILT') && !line.includes('HS_SERVICE')) {
+        circuitLine = line;
+        break;
+      }
+    }
+
+    if (!circuitLine) {
+      console.log('❌ No BUILT circuit found');
+      return null;
+    }
+
+    console.log('✅ Found circuit:', circuitLine.substring(0, 100));
+
+    const parts = circuitLine.split(' ');
+    const circuitId = parts[0];
+    const pathStr = parts[2] || '';
+
+    console.log('📍 Path string:', pathStr);
+
+    // Extract fingerprints from path
+    const fingerprints = pathStr.split(',').map(n => {
+      const match = n.match(/\$([A-F0-9]+)/);
+      return match ? match[1] : null;
+    }).filter(Boolean);
+
+    console.log('🔑 Fingerprints found:', fingerprints.length);
+
+    if (fingerprints.length < 3) {
+      console.log('❌ Not enough fingerprints:', fingerprints);
+      return null;
+    }
+
+    // Get node info for each hop
+    const hops = [];
+    for (const fp of fingerprints) {
+      try {
+        const nodeResp = await sendTorCommand(`GETINFO ns/id/${fp}`);
+        const rLine = nodeResp.split('\r\n').find(l => l.startsWith('r '));
+        if (rLine) {
+          const p = rLine.split(' ');
+          const ip = p[6] || 'Unknown';
+          const country = await getCountry(ip);
+          hops.push({
+            nickname: p[1] || 'Unknown',
+            ip,
+            country
+          });
+        } else {
+          hops.push({ nickname: 'Unknown', ip: 'Unknown', country: 'Unknown' });
+        }
+      } catch {
+        hops.push({ nickname: 'Unknown', ip: 'Unknown', country: 'Unknown' });
+      }
+    }
+
+    return {
+      circuitId,
+      hops: {
+        guard: hops[0] || null,
+        middle: hops[1] || null,
+        exit: hops[2] || null
+      }
+    };
+  } catch (error) {
+    console.error('Circuit info error:', error.message);
+    return null;
+  }
+}
 
 let mainWindow;
 let torManager;
@@ -159,13 +339,8 @@ app.whenReady().then(async () => {
   // IPC handler for getting Tor circuit status
   ipcMain.handle('get-tor-circuit', async () => {
     try {
-      // Import TorIntegration class
-      const { TorIntegration } = require(path.join(__dirname, '..', 'lib', 'tor-integration.ts'));
-      const torIntegration = new TorIntegration(9051, 9050);
-
-      const circuitInfo = await torIntegration.getCircuitInfo();
+      const circuitInfo = await getCircuitInfo();
       console.log('📊 Circuit info:', circuitInfo);
-
       return circuitInfo;
     } catch (error) {
       console.error('❌ Failed to get circuit info:', error.message);
@@ -175,14 +350,24 @@ app.whenReady().then(async () => {
 
   // IPC handler for requesting new Tor circuit
   ipcMain.handle('new-tor-circuit', async () => {
+    console.log('🔄 New circuit button clicked...');
     try {
-      const { TorIntegration } = require(path.join(__dirname, '..', 'lib', 'tor-integration.ts'));
-      const torIntegration = new TorIntegration(9051, 9050);
+      // Get current circuit ID to close it
+      const statusResp = await sendTorCommand('GETINFO circuit-status');
+      const circuitMatch = statusResp.match(/^(\d+)\s+BUILT/m);
 
-      const success = await torIntegration.requestNewCircuit();
-      console.log(success ? '✅ New circuit requested' : '❌ Failed to request new circuit');
+      if (circuitMatch) {
+        const circuitId = circuitMatch[1];
+        console.log('🔌 Closing circuit:', circuitId);
+        // Close the current circuit
+        await sendTorCommand(`CLOSECIRCUIT ${circuitId}`);
+      }
 
-      return success;
+      // Request new identity (clears DNS cache and uses new circuits)
+      const response = await sendTorCommand('SIGNAL NEWNYM');
+      console.log('✅ New circuit requested, response:', response);
+
+      return true;
     } catch (error) {
       console.error('❌ Failed to request new circuit:', error.message);
       return false;

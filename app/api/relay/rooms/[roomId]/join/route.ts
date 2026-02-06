@@ -1,6 +1,6 @@
 // API route for joining chatrooms (mock relay for development)
 import { NextRequest, NextResponse } from 'next/server';
-import { getTorIP, generateAnonymousId } from '@/lib/torProxy';
+import { getTorIP, generateAnonymousId } from '@/lib/tor-integration';
 
 // In-memory storage for development (replace with Redis in production)
 const roomUsers = new Map<string, Set<any>>();

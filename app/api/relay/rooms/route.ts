@@ -1,6 +1,6 @@
 // API route for creating anonymous chat rooms
 import { NextRequest, NextResponse } from 'next/server';
-import { getTorIP, generateAnonymousId } from '@/lib/torProxy';
+import { getTorIP, generateAnonymousId } from '@/lib/tor-integration';
 
 export async function POST(request: NextRequest) {
   try {

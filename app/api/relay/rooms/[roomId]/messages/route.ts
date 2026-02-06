@@ -1,6 +1,6 @@
 // API route for sending and receiving messages with replay protection
 import { NextRequest, NextResponse } from 'next/server';
-import { getTorIP } from '@/lib/torProxy';
+import { getTorIP } from '@/lib/tor-integration';
 
 interface StoredMessage {
   id: string;

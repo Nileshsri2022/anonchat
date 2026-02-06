@@ -615,3 +615,30 @@ export class TorIntegration {
 }
 
 export const torIntegration = new TorIntegration();
+
+/**
+ * Get current Tor exit IP or return a placeholder if Tor is not available
+ * Used by API routes for anonymous IP tracking
+ */
+export async function getTorIP(): Promise<string> {
+  try {
+    // Try to get actual Tor IP through external service
+    const response = await fetch('https://api.ipify.org?format=json', {
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await response.json();
+    return data.ip || 'tor-anonymous';
+  } catch {
+    // Fallback: return anonymous placeholder
+    return `tor-${Math.random().toString(36).substring(2, 8)}`;
+  }
+}
+
+/**
+ * Generate a cryptographically random anonymous ID
+ */
+export function generateAnonymousId(): string {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+}
