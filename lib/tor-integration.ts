@@ -535,16 +535,27 @@ export class TorIntegration {
       // Get country code via GeoIP (only if IP is valid)
       if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
         try {
+          console.log(`      🌍 Querying Tor GeoIP for ${ip}...`);
           const geo = await this.sendTorCommand(`GETINFO ip-to-country/${ip}`);
-          const match = geo.match(/=([a-z]{2})/i);
-          if (match) {
+          console.log(`      📄 Tor GeoIP response: ${geo}`);
+
+          const match = geo.match(/ip-to-country\/[\d.]+=(..)/i);
+          if (match && match[1] !== '??') {
             country = match[1].toUpperCase();
-            console.log(`      🌍 Country: ${country}`);
+            console.log(`      ✅ Country resolved from Tor: ${country}`);
+          } else {
+            console.log(`      ⚠️ Tor GeoIP unavailable, trying fallback API...`);
+            // Fallback: Use external GeoIP API
+            country = await this.getCountryFromAPI(ip);
           }
-        } catch (error) {
-          // GeoIP might not be available, that's okay
-          console.log(`      ⚠️ GeoIP not available for ${ip}`);
+        } catch (error: any) {
+          console.log(`      ❌ Tor GeoIP query failed: ${error.message}`);
+          console.log(`      🔄 Trying fallback GeoIP API...`);
+          // Fallback: Use external GeoIP API
+          country = await this.getCountryFromAPI(ip);
         }
+      } else {
+        console.log(`      ⚠️ Invalid IP format: ${ip}`);
       }
 
       return { nickname, ip, country };
@@ -552,6 +563,23 @@ export class TorIntegration {
       console.error(`Failed to get node info for ${fingerprint}:`, error);
       return { nickname: 'Unknown' };
     }
+  }
+
+  /**
+   * Fallback GeoIP lookup using external API
+   */
+  private async getCountryFromAPI(ip: string): Promise<string | undefined> {
+    try {
+      const response = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`);
+      const data = await response.json();
+      if (data.countryCode) {
+        console.log(`      ✅ Country resolved from API: ${data.countryCode}`);
+        return data.countryCode;
+      }
+    } catch (error: any) {
+      console.log(`      ❌ Fallback GeoIP API failed: ${error.message}`);
+    }
+    return undefined;
   }
 
   /**
