@@ -9,7 +9,7 @@ import { RoomInfoPanel } from '@/components/room-info-panel';
 import { RoomJoinModal } from '@/components/room-join-modal';
 import { SettingsPanel } from '@/components/settings-panel';
 import { Button } from '@/components/ui/button';
-import { Users } from 'lucide-react';
+import { PanelLeftClose, PanelLeft } from 'lucide-react';
 
 interface Room {
   id: string;
@@ -26,6 +26,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [showRoomJoin, setShowRoomJoin] = useState(false);
   const [currentView, setCurrentView] = useState<'rooms' | 'contacts'>('rooms');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rooms, setRooms] = useState<Room[]>([]);
 
   useEffect(() => {
@@ -118,49 +119,73 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar with tabs */}
-      <div className="w-80 border-r border-border bg-muted/20 flex flex-col">
-        {/* View Tabs */}
-        <div className="flex border-b border-border">
-          <button
-            onClick={() => setCurrentView('rooms')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-              currentView === 'rooms'
+      {sidebarOpen && (
+        <div className="w-80 border-r border-border bg-muted/20 flex flex-col relative">
+          {/* Close button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-1 right-1 z-10 h-8 w-8"
+            onClick={() => setSidebarOpen(false)}
+            title="Close sidebar"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </Button>
+          {/* View Tabs */}
+          <div className="flex border-b border-border">
+            <button
+              onClick={() => setCurrentView('rooms')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${currentView === 'rooms'
                 ? 'bg-background border-b-2 border-primary text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Rooms
-          </button>
-          <button
-            onClick={() => setCurrentView('contacts')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-              currentView === 'contacts'
+                }`}
+            >
+              Rooms
+            </button>
+            <button
+              onClick={() => setCurrentView('contacts')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${currentView === 'contacts'
                 ? 'bg-background border-b-2 border-primary text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Contacts
-          </button>
-        </div>
+                }`}
+            >
+              Contacts
+            </button>
+          </div>
 
-        {/* Content based on current view */}
-        {currentView === 'rooms' ? (
-          <RoomList
-            rooms={rooms}
-            selectedId={selectedRoom}
-            onSelect={setSelectedRoom}
-            onCreateRoom={() => setShowRoomJoin(true)}
-            onOpenSettings={() => setShowSettings(true)}
-          />
-        ) : (
-          <ContactList
-            onStartChat={(contactId, contactName) => {
-              // Reuse the same room join modal as the +New button
-              setShowRoomJoin(true);
-            }}
-          />
-        )}
-      </div>
+          {/* Content based on current view */}
+          {currentView === 'rooms' ? (
+            <RoomList
+              rooms={rooms}
+              selectedId={selectedRoom}
+              onSelect={setSelectedRoom}
+              onCreateRoom={() => setShowRoomJoin(true)}
+              onOpenSettings={() => setShowSettings(true)}
+            />
+          ) : (
+            <ContactList
+              onStartChat={(contactId, contactName) => {
+                // Reuse the same room join modal as the +New button
+                setShowRoomJoin(true);
+              }}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Sidebar open button when collapsed */}
+      {!sidebarOpen && (
+        <div className="border-r border-border bg-muted/20 p-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(true)}
+            title="Open sidebar"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       {selectedRoom && selectedRoomData ? (
         <>

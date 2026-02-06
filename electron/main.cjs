@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron');
+const { app, BrowserWindow, ipcMain, session, Menu } = require('electron');
 const path = require('path');
 const net = require('net');
 const fetch = require('node-fetch');
@@ -399,9 +399,60 @@ app.whenReady().then(async () => {
   // Create window after Tor is ready
   createWindow();
 
+  // Create application menu with "New Window" option
+  const menuTemplate = [
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            const newWin = new BrowserWindow({
+              width: 1200,
+              height: 800,
+              webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                preload: path.join(__dirname, 'preload.js')
+              }
+            });
+            newWin.loadURL('http://localhost:3000');
+          }
+        },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(menuTemplate);
+  Menu.setApplicationMenu(menu);
+
   console.log('');
   console.log('🚀 AnonChat started with embedded Tor');
   console.log('🔐 All traffic is routed through Tor network');
+  console.log('💡 Press Ctrl+N to open a new window for testing');
   console.log('');
 });
 

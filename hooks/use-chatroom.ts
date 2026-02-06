@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { relayAPI, RelayMessage } from '@/lib/relay-api';
 import { roomEncryption } from '@/lib/room-encryption';
+import { socketService } from '@/lib/socket-service';
 
 export interface Message {
   id: string;
@@ -40,6 +41,7 @@ export function useChatroom(roomId: string, roomName: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<RoomUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [useWebSocket, setUseWebSocket] = useState(true); // Try WebSocket first
   const [messageTTL, setMessageTTL] = useState(0); // 0 = off, or ms until expiry
   const [currentUser] = useState(() => ({
     id: `user_${Math.random().toString(36).substr(2, 9)}`,
@@ -116,64 +118,86 @@ export function useChatroom(roomId: string, roomName: string) {
     return () => clearInterval(cleanupInterval);
   }, []);
 
-  // Start polling
+  // WebSocket or Polling for real-time messages
   useEffect(() => {
     if (!isConnected) return;
 
+    const handleNewMessage = async (msg: RelayMessage) => {
+      // Skip messages from current user
+      if (msg.userId === currentUser.id) return;
+
+      try {
+        const decrypted = await roomEncryption.decrypt({
+          ciphertext: msg.encryptedContent,
+          iv: msg.iv,
+          tag: '',
+        });
+
+        // Add user if not exists
+        setUsers(prev => {
+          const exists = prev.some(u => u.id === msg.userId);
+          if (!exists) {
+            return [...prev, {
+              id: msg.userId,
+              username: msg.username,
+              color: USER_COLORS[prev.length % USER_COLORS.length],
+              online: true,
+              joinedAt: new Date(msg.timestamp),
+            }];
+          }
+          return prev;
+        });
+
+        const newMessage: Message = {
+          id: msg.id,
+          userId: msg.userId,
+          username: msg.username,
+          content: decrypted,
+          timestamp: new Date(msg.timestamp),
+          encrypted: true,
+          ip: msg.ip,
+          expiresAt: msg.expiresAt,
+        };
+
+        setMessages(prev => [...prev, newMessage]);
+      } catch (error) {
+        console.error('[v0] Decrypt error:', error);
+      }
+    };
+
+    // Handle batch messages from polling
     const handleNewMessages = async (relayMessages: RelayMessage[]) => {
-      // Filter out messages from current user to avoid duplicates with local adds
-      const relevantMessages = relayMessages.filter(msg => msg.userId !== currentUser.id);
-      const decryptedMessages: Message[] = [];
-
-      for (const msg of relevantMessages) {
-        try {
-          const decrypted = await roomEncryption.decrypt({
-            ciphertext: msg.encryptedContent,
-            iv: msg.iv,
-            tag: '',
-          });
-
-          // Add user if not exists
-          setUsers(prev => {
-            const exists = prev.some(u => u.id === msg.userId);
-            if (!exists && msg.userId !== currentUser.id) {
-              const newUser: RoomUser = {
-                id: msg.userId,
-                username: msg.username,
-                color: USER_COLORS[prev.length % USER_COLORS.length],
-                online: true,
-                joinedAt: new Date(msg.timestamp),
-              };
-              return [...prev, newUser];
-            }
-            return prev;
-          });
-
-          decryptedMessages.push({
-            id: msg.id,
-            userId: msg.userId,
-            username: msg.username,
-            content: decrypted,
-            timestamp: new Date(msg.timestamp),
-            encrypted: true,
-            ip: msg.ip,
-          });
-        } catch (error) {
-          console.error('[v0] Decrypt error:', error);
-        }
-      }
-
-      if (decryptedMessages.length > 0) {
-        setMessages(prev => [...prev, ...decryptedMessages]);
+      for (const msg of relayMessages) {
+        await handleNewMessage(msg);
       }
     };
 
-    relayAPI.startPolling(roomId, handleNewMessages, lastMessageIdRef.current);
+    // Try WebSocket first
+    if (useWebSocket) {
+      socketService.connect()
+        .then(() => {
+          console.log('🔌 Using WebSocket for real-time updates');
+          socketService.joinRoom(roomId, currentUser.id, currentUser.username);
+          socketService.onMessage(roomId, handleNewMessage);
+        })
+        .catch((err) => {
+          console.warn('🔌 WebSocket failed, falling back to polling:', err.message);
+          setUseWebSocket(false);
+        });
 
-    return () => {
-      relayAPI.stopPolling(roomId);
-    };
-  }, [isConnected, roomId, currentUser.id]);
+      return () => {
+        socketService.leaveRoom(roomId, currentUser.id);
+      };
+    } else {
+      // Fallback to polling
+      console.log('📡 Using polling for real-time updates');
+      relayAPI.startPolling(roomId, handleNewMessages, lastMessageIdRef.current);
+
+      return () => {
+        relayAPI.stopPolling(roomId);
+      };
+    }
+  }, [isConnected, roomId, currentUser.id, currentUser.username, useWebSocket]);
 
   // Send message
   const sendMessage = useCallback(async (content: string) => {
@@ -195,6 +219,11 @@ export function useChatroom(roomId: string, roomName: string) {
       };
 
       const sendResult = await relayAPI.sendMessage(relayMessage);
+
+      // Also broadcast via WebSocket for real-time delivery
+      if (useWebSocket && socketService.isConnected()) {
+        socketService.sendMessage(roomId, relayMessage);
+      }
 
       const newMessage: Message = {
         id: sendResult.messageId,
