@@ -1,0 +1,12 @@
+{
+    "description": "SHA256 hashes for Tor binaries - verify integrity before launch",
+    "hashes": {
+        "windows": "5c204e004ec7f65ebe3a9bdc55170144a1067bf89a6712b87e0825a036e45ff8",
+        "linux-x64": "COMPUTE_AND_UPDATE",
+        "linux-arm64": "COMPUTE_AND_UPDATE",
+        "macos-x64": "COMPUTE_AND_UPDATE",
+        "macos-arm64": "COMPUTE_AND_UPDATE"
+    },
+    "skipVerification": false,
+    "lastUpdated": "2026-02-07"
+}

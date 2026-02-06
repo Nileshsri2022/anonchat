@@ -210,7 +210,7 @@ function getTorBinaryPath() {
 }
 
 /**
- * Bootstrap embedded Tor with hard-fail enforcement
+ * Bootstrap embedded Tor with hash verification
  */
 async function bootstrapTor() {
   const torBinary = getTorBinaryPath();
@@ -228,8 +228,30 @@ async function bootstrapTor() {
     console.log('📍 Binary:', torBinary);
     console.log('📍 Config:', torrc);
 
-    // Optional: Verify binary integrity (uncomment when you have hashes)
-    // torManager.verifyBinaryIntegrity('YOUR_SHA256_HASH_HERE');
+    // Load and verify binary integrity
+    const hashConfigPath = path.join(__dirname, 'tor-hashes.json');
+    if (require('fs').existsSync(hashConfigPath)) {
+      const hashConfig = require(hashConfigPath);
+      if (!hashConfig.skipVerification) {
+        const platform = process.platform;
+        const arch = process.arch;
+        let hashKey = 'windows';
+        if (platform === 'linux') hashKey = arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
+        if (platform === 'darwin') hashKey = arch === 'arm64' ? 'macos-arm64' : 'macos-x64';
+
+        const expectedHash = hashConfig.hashes[hashKey];
+        if (expectedHash && !expectedHash.includes('COMPUTE')) {
+          console.log('🔍 Verifying Tor binary integrity...');
+          torManager.verifyBinaryIntegrity(expectedHash);
+        } else {
+          console.warn('⚠️ No hash configured for this platform, skipping verification');
+        }
+      } else {
+        console.warn('⚠️ Hash verification disabled in config');
+      }
+    } else {
+      console.warn('⚠️ No hash config found, skipping verification');
+    }
 
     torManager.start();
     await torManager.waitForReady(30000);
