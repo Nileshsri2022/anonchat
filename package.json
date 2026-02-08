@@ -103,6 +103,7 @@
     "@radix-ui/react-toggle-group": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
     "@vercel/analytics": "^1.4.1",
+    "autoprefixer": "^10.4.24",
     "better-sqlite3": "^12.4.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -146,8 +147,8 @@
     "electron-builder": "^26.7.0",
     "eslint": "8",
     "eslint-config-next": "14",
-    "postcss": "^8.5.0",
-    "tailwindcss": "^4.1.9",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
     "tw-animate-css": "^1.3.3",
     "typescript": "^5.7.3",
     "wait-on": "^9.0.3"
