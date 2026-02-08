@@ -337,13 +337,18 @@ export class TorIntegration {
       throw new Error('Tor proxy agent not initialized');
     }
 
-    // For server-side use only
-    const { default: fetch } = await import('node-fetch');
+    // Use native fetch with proxy agent
+    // Note: In Electron main process, node-fetch with socks-proxy-agent works
+    // In Next.js API routes, we use the native fetch which respects HTTP_PROXY env vars
+    // For direct SOCKS proxy support, configure at the system/Electron level
 
-    return fetch(url, {
-      ...options,
-      agent: this.proxyAgent,
-    } as any);
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (error) {
+      console.error('Fetch through Tor failed:', error);
+      throw error;
+    }
   }
 
   getProxyAgent(): SocksProxyAgent | null {

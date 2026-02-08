@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Shield, Info, Users, Send, Copy, Check, QrCode, Timer } from 'lucide-react';
@@ -29,18 +29,18 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = useCallback(() => {
     if (message.trim()) {
       sendMessage(message);
       setMessage('');
     }
-  };
+  }, [message, sendMessage]);
 
-  const copyRoomId = () => {
+  const copyRoomId = useCallback(() => {
     navigator.clipboard.writeText(roomId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
+  }, [roomId]);
 
   return (
     <div className="flex-1 flex flex-col bg-background">

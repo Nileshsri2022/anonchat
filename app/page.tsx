@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { OnboardingModal } from '@/components/onboarding-modal';
 import { RoomList } from '@/components/room-list';
 import { ContactList } from '@/components/contact-list';
@@ -8,8 +8,9 @@ import { ChatroomInterface } from '@/components/chatroom-interface';
 import { RoomInfoPanel } from '@/components/room-info-panel';
 import { RoomJoinModal } from '@/components/room-join-modal';
 import { SettingsPanel } from '@/components/settings-panel';
+import { CreateGroupModal } from '@/components/create-group-modal';
 import { Button } from '@/components/ui/button';
-import { PanelLeftClose, PanelLeft } from 'lucide-react';
+import { PanelLeftClose, PanelLeft, Users } from 'lucide-react';
 
 interface Room {
   id: string;
@@ -25,6 +26,7 @@ export default function Home() {
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoomJoin, setShowRoomJoin] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [currentView, setCurrentView] = useState<'rooms' | 'contacts'>('rooms');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -81,36 +83,49 @@ export default function Home() {
     }
   }, []);
 
-  const handleOnboardingComplete = () => {
+  const handleOnboardingComplete = useCallback(() => {
     localStorage.setItem('anonchat_onboarding_complete', 'true');
     setShowOnboarding(false);
     setShowRoomJoin(true);
-  };
+  }, []);
 
-  const handleJoinRoom = (roomId: string, roomName: string, isNewRoom: boolean) => {
-    const existingRoom = rooms.find(r => r.id === roomId);
-
-    if (!existingRoom) {
-      const newRoom: Room = {
-        id: roomId,
-        name: roomName,
-        userCount: isNewRoom ? 1 : 3,
-        lastActivity: new Date(),
-        encrypted: true,
-      };
-      const updatedRooms = [...rooms, newRoom];
-      setRooms(updatedRooms);
-    }
-
+  const handleJoinRoom = useCallback((roomId: string, roomName: string, isNewRoom: boolean) => {
+    setRooms(prev => {
+      const existingRoom = prev.find(r => r.id === roomId);
+      if (!existingRoom) {
+        const newRoom: Room = {
+          id: roomId,
+          name: roomName,
+          userCount: isNewRoom ? 1 : 3,
+          lastActivity: new Date(),
+          encrypted: true,
+        };
+        return [...prev, newRoom];
+      }
+      return prev;
+    });
     setSelectedRoom(roomId);
-  };
+  }, []);
 
-  const handleLeaveRoom = () => {
+  const handleLeaveRoom = useCallback(() => {
     setSelectedRoom(null);
     setShowInfoPanel(false);
-  };
+  }, []);
 
-  const selectedRoomData = rooms.find(r => r.id === selectedRoom);
+  const handleCreateGroup = useCallback((groupName: string, selectedRoomIds: string[], selectedContactIds: string[]) => {
+    // Create a new group room that combines selected rooms/contacts
+    const groupRoom: Room = {
+      id: `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: groupName,
+      userCount: selectedRoomIds.length + selectedContactIds.length + 1, // +1 for creator
+      lastActivity: new Date(),
+      encrypted: true,
+    };
+    setRooms(prev => [...prev, groupRoom]);
+    setSelectedRoom(groupRoom.id);
+  }, []);
+
+  const selectedRoomData = useMemo(() => rooms.find(r => r.id === selectedRoom), [rooms, selectedRoom]);
 
   if (showOnboarding) {
     return <OnboardingModal onComplete={handleOnboardingComplete} />;
@@ -160,6 +175,7 @@ export default function Home() {
               selectedId={selectedRoom}
               onSelect={setSelectedRoom}
               onCreateRoom={() => setShowRoomJoin(true)}
+              onCreateGroup={() => setShowCreateGroup(true)}
               onOpenSettings={() => setShowSettings(true)}
             />
           ) : (
@@ -246,6 +262,13 @@ export default function Home() {
       <SettingsPanel
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+
+      <CreateGroupModal
+        isOpen={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+        rooms={rooms}
+        onCreateGroup={handleCreateGroup}
       />
     </div>
   );

@@ -1,8 +1,9 @@
 'use client';
 
+import { memo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, Shield, Plus, Settings } from 'lucide-react';
+import { Users, Shield, Plus, Settings, UsersRound } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ThemeToggle } from '@/components/theme-toggle';
 
@@ -19,10 +20,11 @@ interface RoomListProps {
   selectedId: string | null;
   onSelect: (roomId: string) => void;
   onCreateRoom: () => void;
+  onCreateGroup?: () => void;
   onOpenSettings?: () => void;
 }
 
-export function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onOpenSettings }: RoomListProps) {
+export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onCreateGroup, onOpenSettings }: RoomListProps) {
   return (
     <div className="w-80 border-r border-border bg-muted/20 flex flex-col">
       <div className="p-4 border-b border-border">
@@ -39,6 +41,11 @@ export function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onOpenSett
               <Plus className="w-4 h-4 mr-1" />
               New
             </Button>
+            {onCreateGroup && rooms.length > 0 && (
+              <Button size="sm" variant="outline" onClick={onCreateGroup}>
+                <UsersRound className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
         <div className="text-xs text-muted-foreground">
@@ -65,11 +72,10 @@ export function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onOpenSett
               <button
                 key={room.id}
                 onClick={() => onSelect(room.id)}
-                className={`w-full p-3 rounded-lg text-left transition-colors ${
-                  selectedId === room.id
-                    ? 'bg-primary/10 border border-primary/20'
-                    : 'hover:bg-muted border border-transparent'
-                }`}
+                className={`w-full p-3 rounded-lg text-left transition-colors ${selectedId === room.id
+                  ? 'bg-primary/10 border border-primary/20'
+                  : 'hover:bg-muted border border-transparent'
+                  }`}
               >
                 <div className="flex items-start justify-between mb-1">
                   <span className="font-semibold text-sm">{room.name}</span>
@@ -95,4 +101,4 @@ export function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onOpenSett
       </ScrollArea>
     </div>
   );
-}
+});

@@ -188,25 +188,56 @@ let mainWindow;
 let torManager;
 
 /**
+ * Check if running in packaged/production mode
+ */
+function isPackaged() {
+  return app.isPackaged || process.env.NODE_ENV === 'production';
+}
+
+/**
  * Get platform-specific Tor binary path
  */
 function getTorBinaryPath() {
   const platform = process.platform;
-  const arch = process.arch;
 
   let dir;
+  let subdir = ''; // Subdirectory within the platform folder
+
   if (platform === 'win32') {
     dir = 'windows';
   } else if (platform === 'linux') {
-    dir = arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
+    dir = 'linux';
+    subdir = 'tor'; // Extracted to linux/tor/tor
   } else if (platform === 'darwin') {
-    dir = arch === 'arm64' ? 'macos-arm64' : 'macos-x64';
+    dir = 'macos';
+    subdir = 'tor'; // Extracted to macos/tor/tor
   } else {
     throw new Error(`Unsupported platform: ${platform}`);
   }
 
   const binaryName = platform === 'win32' ? 'tor.exe' : 'tor';
-  return path.join(__dirname, 'tor', dir, binaryName);
+
+  // In production, Tor is in extraResources
+  if (isPackaged()) {
+    return subdir
+      ? path.join(process.resourcesPath, 'tor', dir, subdir, binaryName)
+      : path.join(process.resourcesPath, 'tor', dir, binaryName);
+  }
+
+  // In development, use local path
+  return subdir
+    ? path.join(__dirname, 'tor', dir, subdir, binaryName)
+    : path.join(__dirname, 'tor', dir, binaryName);
+}
+
+/**
+ * Get torrc config path
+ */
+function getTorrcPath() {
+  if (isPackaged()) {
+    return path.join(process.resourcesPath, 'tor', 'torrc.conf');
+  }
+  return path.join(__dirname, 'torrc.conf');
 }
 
 /**
@@ -214,7 +245,7 @@ function getTorBinaryPath() {
  */
 async function bootstrapTor() {
   const torBinary = getTorBinaryPath();
-  const torrc = path.join(__dirname, 'torrc.conf');
+  const torrc = getTorrcPath();
 
   torManager = new TorManager({
     torPath: torBinary,
@@ -225,6 +256,7 @@ async function bootstrapTor() {
 
   try {
     console.log('🔒 Starting embedded Tor...');
+    console.log('📦 Packaged:', isPackaged());
     console.log('📍 Binary:', torBinary);
     console.log('📍 Config:', torrc);
 
@@ -296,7 +328,15 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      // Additional security hardening
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false,
+      enableBlinkFeatures: '',
+      // Disable remote module (deprecated but still good to disable)
+      enableRemoteModule: false,
     }
   });
 
@@ -307,6 +347,20 @@ function createWindow() {
   if (process.env.NODE_ENV !== 'production') {
     mainWindow.webContents.openDevTools();
   }
+
+  // Prevent navigation to external URLs (security)
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('http://localhost:3000')) {
+      console.log('🛑 Blocked navigation to:', url);
+      event.preventDefault();
+    }
+  });
+
+  // Prevent opening new windows (use IPC instead)
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    console.log('🛑 Blocked new window:', url);
+    return { action: 'deny' };
+  });
 }
 
 /**
@@ -316,6 +370,9 @@ app.on('web-contents-created', (event, contents) => {
   // Prevent webview preload scripts
   contents.on('will-attach-webview', (e, webPreferences) => {
     webPreferences.preload = '';
+    // Disable node integration in webviews
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
   });
 
   // Disable WebRTC to prevent UDP leaks
@@ -336,6 +393,27 @@ app.on('web-contents-created', (event, contents) => {
     })();
   `).catch(() => {
     // Ignore errors if page not ready
+  });
+});
+
+/**
+ * Set Content Security Policy
+ */
+app.on('ready', () => {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self' http://localhost:3000; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:3000; " +
+          "style-src 'self' 'unsafe-inline' http://localhost:3000; " +
+          "img-src 'self' data: blob: http://localhost:3000; " +
+          "connect-src 'self' http://localhost:3000 ws://localhost:3000; " +
+          "font-src 'self' data:;"
+        ]
+      }
+    });
   });
 });
 
