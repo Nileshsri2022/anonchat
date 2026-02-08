@@ -60,10 +60,10 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
       ],
-      "category": "Network"
+      "category": "Network",
+      "maintainer": "AnonChat Team <anonchat@example.com>"
     },
     "nsis": {
       "oneClick": false,
