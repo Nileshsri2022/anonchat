@@ -8,10 +8,10 @@ const config = {
         wsUrl: 'ws://localhost:3000'
     },
 
-    // Production - Your live Vercel deployment
+    // Production - Render deployment (full WebSocket support)
     production: {
-        serverUrl: process.env.SERVER_URL || 'https://anonchat-swart.vercel.app',
-        wsUrl: process.env.WS_URL || 'wss://anonchat-swart.vercel.app'
+        serverUrl: process.env.SERVER_URL || 'https://anonchat-6rbu.onrender.com',
+        wsUrl: process.env.WS_URL || 'wss://anonchat-6rbu.onrender.com'
     }
 };
 
