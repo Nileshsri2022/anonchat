@@ -2,7 +2,6 @@
 # PRODUCTION-READY DOCKERFILE FOR NEXT.JS + BUN
 # ============================================
 # Multi-stage build with Tor support
-# App starts immediately, Tor connects in background
 # ============================================
 
 # Stage 1: Base with build dependencies
@@ -49,19 +48,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN groupadd --system --gid 1001 nodejs && \
     useradd --system --uid 1001 --gid nodejs nextjs
 
-# Configure Tor directories
-RUN mkdir -p /var/lib/tor /var/run/tor && \
-    chown -R nextjs:nodejs /var/lib/tor /var/run/tor && \
+# Configure Tor for non-root user
+RUN mkdir -p /var/lib/tor /var/run/tor /var/log/tor && \
+    chown -R nextjs:nodejs /var/lib/tor /var/run/tor /var/log/tor && \
     chmod 700 /var/lib/tor
 
-# Create Tor config - allow passwordless control port access
+# Create Tor config for non-root user
 RUN echo "SocksPort 9050" > /etc/tor/torrc && \
     echo "ControlPort 9051" >> /etc/tor/torrc && \
     echo "CookieAuthentication 0" >> /etc/tor/torrc && \
     echo "DataDirectory /var/lib/tor" >> /etc/tor/torrc && \
+    echo "Log notice file /var/log/tor/notices.log" >> /etc/tor/torrc && \
     echo "RunAsDaemon 0" >> /etc/tor/torrc && \
-    echo "Log notice stdout" >> /etc/tor/torrc && \
-    chown nextjs:nodejs /etc/tor/torrc
+    chown nextjs:nodejs /etc/tor/torrc && \
+    chmod 644 /etc/tor/torrc
 
 # Set environment
 ENV NODE_ENV=production
@@ -76,13 +76,26 @@ COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/server.js ./
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Create startup script
-# KEY: Start Tor in background, then start app IMMEDIATELY
-# This ensures port 3000 opens fast so Render doesn't timeout
+# Create startup script with better Tor handling
 RUN printf '#!/bin/bash\n\
-    echo "=== Starting Tor in background ==="\n\
-    tor > /tmp/tor.log 2>&1 &\n\
-    echo "Tor PID: $!"\n\
+    set -e\n\
+    \n\
+    echo "=== Starting Tor daemon ==="\n\
+    # Start Tor and capture output\n\
+    tor -f /etc/tor/torrc &\n\
+    TOR_PID=$!\n\
+    echo "Tor started with PID: $TOR_PID"\n\
+    \n\
+    # Give Tor a moment to initialize\n\
+    sleep 3\n\
+    \n\
+    # Check if Tor is still running\n\
+    if kill -0 $TOR_PID 2>/dev/null; then\n\
+    echo "Tor is running"\n\
+    else\n\
+    echo "WARNING: Tor failed to start. Continuing without Tor."\n\
+    cat /var/log/tor/notices.log 2>/dev/null || echo "No Tor logs available"\n\
+    fi\n\
     \n\
     echo "=== Starting Next.js application ==="\n\
     echo "Binding to ${HOSTNAME}:${PORT}"\n\
@@ -96,9 +109,9 @@ USER nextjs
 # Expose port
 EXPOSE 3000
 
-# Health check (only checks app, Tor may take time to connect)
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT}/api/relay || exit 1
 
-# Start the application (Tor starts first but doesn't block)
+# Start the application
 CMD ["/bin/bash", "/app/start.sh"]
