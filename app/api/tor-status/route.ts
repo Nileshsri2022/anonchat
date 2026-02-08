@@ -22,73 +22,93 @@ async function getTorStatus(): Promise<TorStatus> {
             bootstrapProgress: 0,
         };
 
-        socket.setTimeout(5000);
+        let dataBuffer = '';
+
+        socket.setTimeout(10000);
 
         socket.on('connect', () => {
+            console.log('[TOR-STATUS] Connected to Tor control port');
             status.connected = true;
-            // Request circuit status
-            socket.write('AUTHENTICATE ""\r\n');
+            // Authenticate (no password set in torrc)
+            socket.write('AUTHENTICATE\r\n');
         });
 
-        socket.on('data', async (data) => {
-            const response = data.toString();
+        socket.on('data', (data) => {
+            dataBuffer += data.toString();
+            console.log('[TOR-STATUS] Received:', data.toString().trim());
 
-            if (response.includes('250 OK')) {
-                // Request bootstrap status
+            // After auth, get bootstrap status
+            if (dataBuffer.includes('250 OK') && !dataBuffer.includes('BOOTSTRAP')) {
                 socket.write('GETINFO status/bootstrap-phase\r\n');
             }
 
-            if (response.includes('BOOTSTRAP')) {
-                const progressMatch = response.match(/PROGRESS=(\d+)/);
+            // Parse bootstrap progress
+            if (dataBuffer.includes('BOOTSTRAP')) {
+                const progressMatch = dataBuffer.match(/PROGRESS=(\d+)/);
                 if (progressMatch) {
                     status.bootstrapProgress = parseInt(progressMatch[1], 10);
                     status.circuitEstablished = status.bootstrapProgress === 100;
+                    console.log('[TOR-STATUS] Bootstrap progress:', status.bootstrapProgress);
                 }
 
-                if (status.circuitEstablished) {
-                    // Get exit IP via Tor
-                    try {
-                        const ipResponse = await fetch('https://api.ipify.org?format=json', {
-                            signal: AbortSignal.timeout(10000),
-                        });
-                        const ipData = await ipResponse.json();
-                        status.exitIp = ipData.ip;
-
-                        // Get country
-                        const geoResponse = await fetch(`http://ip-api.com/json/${status.exitIp}?fields=countryCode`);
-                        const geoData = await geoResponse.json();
-                        status.country = geoData.countryCode;
-                    } catch {
-                        // IP fetch failed, continue without it
-                    }
-                }
-
+                // Close socket and resolve
                 socket.end();
                 resolve(status);
             }
         });
 
         socket.on('timeout', () => {
-            status.error = 'Connection timeout';
+            console.log('[TOR-STATUS] Connection timeout');
+            status.error = 'Connection timeout - Tor may still be starting';
             socket.destroy();
             resolve(status);
         });
 
         socket.on('error', (err) => {
-            status.error = err.message;
+            console.log('[TOR-STATUS] Socket error:', err.message);
+            status.error = `Tor control port error: ${err.message}`;
             resolve(status);
         });
 
+        socket.on('close', () => {
+            if (!status.connected && !status.error) {
+                status.error = 'Connection closed unexpectedly';
+                resolve(status);
+            }
+        });
+
         // Connect to Tor control port
+        console.log('[TOR-STATUS] Connecting to Tor control port 9051...');
         socket.connect(9051, '127.0.0.1');
     });
+}
+
+// Get the server's exit IP (to show users what IP the server uses)
+async function getServerIP(): Promise<string | null> {
+    try {
+        const response = await fetch('https://api.ipify.org?format=json', {
+            signal: AbortSignal.timeout(5000),
+        });
+        const data = await response.json();
+        return data.ip;
+    } catch {
+        return null;
+    }
 }
 
 export async function GET() {
     try {
         const status = await getTorStatus();
+
+        // If Tor is connected and circuit established, get the server's IP
+        // Note: This gets server IP, not Tor exit IP (would need SOCKS proxy for that)
+        if (status.circuitEstablished) {
+            status.exitIp = await getServerIP();
+        }
+
         return NextResponse.json(status);
     } catch (error) {
+        console.error('[TOR-STATUS] Error:', error);
         return NextResponse.json({
             connected: false,
             circuitEstablished: false,
