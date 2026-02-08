@@ -2,7 +2,7 @@
 # PRODUCTION-READY DOCKERFILE FOR NEXT.JS + BUN
 # ============================================
 # Multi-stage build with security hardening,
-# optimized caching, and minimal runtime image
+# optimized caching, Tor support, and minimal runtime
 # ============================================
 
 # Stage 1: Base with build dependencies
@@ -51,13 +51,31 @@ RUN bun run build
 # Prune dev dependencies after build
 RUN bun install --frozen-lockfile --production
 
-# Stage 4: Production runtime (using debian for user management)
+# Stage 4: Production runtime with Tor
 FROM oven/bun:1-debian AS runner
 WORKDIR /app
+
+# Install Tor and curl (for health checks)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tor \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Create non-root user for security
 RUN groupadd --system --gid 1001 nodejs && \
     useradd --system --uid 1001 --gid nodejs nextjs
+
+# Configure Tor
+RUN mkdir -p /var/lib/tor && \
+    chown -R nextjs:nodejs /var/lib/tor && \
+    chmod 700 /var/lib/tor
+
+# Create Tor config
+RUN echo "SocksPort 9050" > /etc/tor/torrc && \
+    echo "ControlPort 9051" >> /etc/tor/torrc && \
+    echo "DataDirectory /var/lib/tor" >> /etc/tor/torrc && \
+    echo "Log notice stdout" >> /etc/tor/torrc
 
 # Set production environment
 ENV NODE_ENV=production
@@ -66,12 +84,16 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # Copy only necessary files from builder
-# Using chown for security (non-root ownership)
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/server.js ./
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Create startup script that runs Tor and the app
+RUN echo '#!/bin/bash\ntor &\nsleep 5\nbun run start' > /app/start.sh && \
+    chmod +x /app/start.sh && \
+    chown nextjs:nodejs /app/start.sh
 
 # Switch to non-root user
 USER nextjs
@@ -79,9 +101,9 @@ USER nextjs
 # Expose port
 EXPOSE 3000
 
-# Health check for container orchestration
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:3000/api/relay || exit 1
 
-# Start the server
-CMD ["bun", "run", "start"]
+# Start Tor and the server
+CMD ["/bin/bash", "/app/start.sh"]
