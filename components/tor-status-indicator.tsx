@@ -47,11 +47,22 @@ export function TorStatusIndicator() {
 
     const fetchBrowserIP = async () => {
         try {
-            const response = await fetch('/api/tor-ip');
+            const response = await fetch('/api/tor-status');
             const data = await response.json();
-            setExitIP(data.ip || 'Unknown');
+
+            if (data.connected && data.circuitEstablished) {
+                setStatus('connected');
+                setExitIP(data.exitIp || 'Server Tor');
+            } else if (data.connected) {
+                setStatus('connecting');
+                setExitIP(`${data.bootstrapProgress}%`);
+            } else {
+                setStatus('disconnected');
+                setExitIP('Unavailable');
+            }
         } catch {
-            setExitIP('Unknown');
+            setStatus('disconnected');
+            setExitIP('Error');
         }
     };
 

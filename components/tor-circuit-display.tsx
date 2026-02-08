@@ -110,13 +110,32 @@ export function TorCircuitDisplay() {
                     setError('No active circuit');
                 }
             } else {
-                // Browser: Fetch IP from API
+                // Browser: Fetch Tor status from server API
                 try {
-                    const response = await fetch('/api/tor-ip');
+                    const response = await fetch('/api/tor-status');
                     const data = await response.json();
-                    setExitIP(data.ip || 'Unknown');
+
+                    if (data.connected && data.circuitEstablished) {
+                        setExitIP(data.exitIp || 'Connected');
+                        // Create a circuit representation for web
+                        setCircuit({
+                            circuitId: 'server-tor',
+                            hops: {
+                                guard: { nickname: 'Guard', country: 'Unknown' },
+                                middle: { nickname: 'Middle', country: 'Unknown' },
+                                exit: { nickname: 'Exit', ip: data.exitIp, country: data.country || 'Unknown' }
+                            }
+                        });
+                    } else if (data.connected) {
+                        setExitIP(`Bootstrap: ${data.bootstrapProgress}%`);
+                    } else {
+                        // Fallback to simple IP API
+                        const ipResponse = await fetch('/api/tor-ip');
+                        const ipData = await ipResponse.json();
+                        setExitIP(ipData.ip || 'Unknown');
+                    }
                 } catch (err) {
-                    setExitIP('Unknown');
+                    setExitIP('Tor unavailable');
                 }
             }
         } catch (err) {
