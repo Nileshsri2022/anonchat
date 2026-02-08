@@ -44,10 +44,10 @@
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable",
-        "dir"
-      ]
+        "dir",
+        "portable"
+      ],
+      "signAndEditExecutable": false
     },
     "mac": {
       "target": [
