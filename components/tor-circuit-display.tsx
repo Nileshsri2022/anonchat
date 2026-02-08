@@ -116,23 +116,22 @@ export function TorCircuitDisplay() {
                     const data = await response.json();
 
                     if (data.connected && data.circuitEstablished) {
-                        setExitIP(data.exitIp || 'Connected');
-                        // Create a circuit representation for web
-                        setCircuit({
-                            circuitId: 'server-tor',
-                            hops: {
-                                guard: { nickname: 'Guard', country: 'Unknown' },
-                                middle: { nickname: 'Middle', country: 'Unknown' },
-                                exit: { nickname: 'Exit', ip: data.exitIp, country: data.country || 'Unknown' }
-                            }
-                        });
+                        // Use circuit data from API if available
+                        if (data.circuit) {
+                            setCircuit({
+                                circuitId: 'server-tor',
+                                hops: {
+                                    guard: data.circuit.guard,
+                                    middle: data.circuit.middle,
+                                    exit: data.circuit.exit
+                                }
+                            });
+                        }
+                        setExitIP(data.exitIp || data.circuit?.exit?.ip || 'Connected');
                     } else if (data.connected) {
                         setExitIP(`Bootstrap: ${data.bootstrapProgress}%`);
                     } else {
-                        // Fallback to simple IP API
-                        const ipResponse = await fetch('/api/tor-ip');
-                        const ipData = await ipResponse.json();
-                        setExitIP(ipData.ip || 'Unknown');
+                        setExitIP(data.error || 'Tor starting...');
                     }
                 } catch (err) {
                     setExitIP('Tor unavailable');
