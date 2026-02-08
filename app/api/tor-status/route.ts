@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { Socket } from 'net';
 
+// Force dynamic - this route must run at request time, not build time
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 interface CircuitHop {
     nickname: string;
     ip: string;
