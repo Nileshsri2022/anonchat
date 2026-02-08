@@ -1,16 +1,15 @@
 # ============================================
 # PRODUCTION-READY DOCKERFILE FOR NEXT.JS + BUN
 # ============================================
-# Multi-stage build with security hardening,
-# optimized caching, Tor support, and minimal runtime
+# Multi-stage build with Tor support
+# App starts immediately, Tor connects in background
 # ============================================
 
 # Stage 1: Base with build dependencies
 FROM oven/bun:1-debian AS base
 WORKDIR /app
 
-# Install build dependencies in a single layer
-# python3 & build-essential needed for better-sqlite3
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     build-essential \
@@ -18,80 +17,75 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Stage 2: Install dependencies with cache optimization
+# Stage 2: Install dependencies
 FROM base AS deps
 WORKDIR /app
-
-# Copy only package files first for better caching
 COPY package.json bun.lock ./
-
-# Install all dependencies (including devDependencies for build)
 RUN bun install --frozen-lockfile
 
 # Stage 3: Build the application
 FROM base AS builder
 WORKDIR /app
-
-# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-
-# Copy source code
 COPY . .
-
-# Ensure public folder exists (create empty if not)
 RUN mkdir -p public
-
-# Set build-time environment variables
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-
-# Build the Next.js application
 RUN bun run build
-
-# Prune dev dependencies after build
 RUN bun install --frozen-lockfile --production
 
 # Stage 4: Production runtime with Tor
 FROM oven/bun:1-debian AS runner
 WORKDIR /app
 
-# Install Tor and curl (for health checks)
+# Install Tor and curl
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tor \
     curl \
+    tor \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Create non-root user for security
+# Create non-root user
 RUN groupadd --system --gid 1001 nodejs && \
     useradd --system --uid 1001 --gid nodejs nextjs
 
-# Configure Tor
-RUN mkdir -p /var/lib/tor && \
-    chown -R nextjs:nodejs /var/lib/tor && \
+# Configure Tor directories
+RUN mkdir -p /var/lib/tor /var/run/tor && \
+    chown -R nextjs:nodejs /var/lib/tor /var/run/tor && \
     chmod 700 /var/lib/tor
 
 # Create Tor config
 RUN echo "SocksPort 9050" > /etc/tor/torrc && \
     echo "ControlPort 9051" >> /etc/tor/torrc && \
     echo "DataDirectory /var/lib/tor" >> /etc/tor/torrc && \
-    echo "Log notice stdout" >> /etc/tor/torrc
+    echo "RunAsDaemon 0" >> /etc/tor/torrc && \
+    echo "Log notice stdout" >> /etc/tor/torrc && \
+    chown nextjs:nodejs /etc/tor/torrc
 
-# Set production environment
+# Set environment
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Copy only necessary files from builder
+# Copy application files
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/server.js ./
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Create startup script that runs Tor and the app
-RUN echo '#!/bin/bash\ntor &\nsleep 5\nbun run start' > /app/start.sh && \
+# Create startup script
+# KEY: Start Tor in background, then start app IMMEDIATELY
+# This ensures port 3000 opens fast so Render doesn't timeout
+RUN printf '#!/bin/bash\n\
+    echo "=== Starting Tor in background ==="\n\
+    tor > /tmp/tor.log 2>&1 &\n\
+    echo "Tor PID: $!"\n\
+    \n\
+    echo "=== Starting Next.js application ==="\n\
+    echo "Binding to ${HOSTNAME}:${PORT}"\n\
+    exec bun run start\n' > /app/start.sh && \
     chmod +x /app/start.sh && \
     chown nextjs:nodejs /app/start.sh
 
@@ -101,9 +95,9 @@ USER nextjs
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:3000/api/relay || exit 1
+# Health check (only checks app, Tor may take time to connect)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/api/relay || exit 1
 
-# Start Tor and the server
+# Start the application (Tor starts first but doesn't block)
 CMD ["/bin/bash", "/app/start.sh"]
