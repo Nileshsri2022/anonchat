@@ -5,6 +5,9 @@
   "description": "Anonymous encrypted chat over Tor network",
   "author": "AnonChat Team",
   "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "next build",
     "dev": "node server.js",
