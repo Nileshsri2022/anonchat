@@ -8,10 +8,10 @@ const config = {
         wsUrl: 'ws://localhost:3000'
     },
 
-    // Production - UPDATE THIS with your deployed server URL
+    // Production - Your live Vercel deployment
     production: {
-        serverUrl: process.env.SERVER_URL || 'https://anonchat.vercel.app',
-        wsUrl: process.env.WS_URL || 'wss://anonchat.vercel.app'
+        serverUrl: process.env.SERVER_URL || 'https://anonchat-swart.vercel.app',
+        wsUrl: process.env.WS_URL || 'wss://anonchat-swart.vercel.app'
     }
 };
 
