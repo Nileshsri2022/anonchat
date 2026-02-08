@@ -2,11 +2,11 @@ name: Build & Release Electron App
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
     tags:
       - 'v*'  # Trigger on version tags like v1.0.0
   pull_request:
-    branches: [main]
+    branches: [master, main]
   workflow_dispatch:  # Manual trigger
 
 # Set permissions for GITHUB_TOKEN
