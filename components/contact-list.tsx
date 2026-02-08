@@ -1,14 +1,24 @@
 'use client';
 
 import { useState, useEffect, useCallback, memo } from 'react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Users, Shield, Check, Clock, AlertCircle, QrCode, Trash2, Eye, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { contactManager, Contact } from '@/lib/contact-manager';
-import { QRContactModal } from '@/components/qr-contact-modal';
-import { ContactVerificationModal } from '@/components/contact-verification-modal';
+
+// Dynamic imports for modals with QR library (~15KB savings)
+const QRContactModal = dynamic(
+  () => import('@/components/qr-contact-modal').then(m => ({ default: m.QRContactModal })),
+  { ssr: false }
+);
+
+const ContactVerificationModal = dynamic(
+  () => import('@/components/contact-verification-modal').then(m => ({ default: m.ContactVerificationModal })),
+  { ssr: false }
+);
 
 interface ContactListProps {
   onStartChat?: (contactId: string, contactName: string) => void;

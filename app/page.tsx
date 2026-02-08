@@ -1,16 +1,35 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { OnboardingModal } from '@/components/onboarding-modal';
+import dynamic from 'next/dynamic';
 import { RoomList } from '@/components/room-list';
 import { ContactList } from '@/components/contact-list';
 import { ChatroomInterface } from '@/components/chatroom-interface';
 import { RoomInfoPanel } from '@/components/room-info-panel';
-import { RoomJoinModal } from '@/components/room-join-modal';
-import { SettingsPanel } from '@/components/settings-panel';
-import { CreateGroupModal } from '@/components/create-group-modal';
 import { Button } from '@/components/ui/button';
-import { PanelLeftClose, PanelLeft, Users } from 'lucide-react';
+import { PanelLeftClose, PanelLeft } from 'lucide-react';
+
+// Dynamic imports for modals - reduces initial bundle by ~40-50KB
+// These components are only loaded when needed
+const OnboardingModal = dynamic(
+  () => import('@/components/onboarding-modal').then(m => ({ default: m.OnboardingModal })),
+  { ssr: false }
+);
+
+const RoomJoinModal = dynamic(
+  () => import('@/components/room-join-modal').then(m => ({ default: m.RoomJoinModal })),
+  { ssr: false }
+);
+
+const SettingsPanel = dynamic(
+  () => import('@/components/settings-panel').then(m => ({ default: m.SettingsPanel })),
+  { ssr: false }
+);
+
+const CreateGroupModal = dynamic(
+  () => import('@/components/create-group-modal').then(m => ({ default: m.CreateGroupModal })),
+  { ssr: false }
+);
 
 interface Room {
   id: string;
