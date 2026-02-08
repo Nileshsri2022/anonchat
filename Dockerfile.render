@@ -48,13 +48,13 @@ RUN bun run build
 # Prune dev dependencies after build
 RUN bun install --frozen-lockfile --production
 
-# Stage 4: Production runtime (minimal image)
-FROM oven/bun:1-slim AS runner
+# Stage 4: Production runtime (using debian for user management)
+FROM oven/bun:1-debian AS runner
 WORKDIR /app
 
 # Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 --ingroup nodejs nextjs
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs nextjs
 
 # Set production environment
 ENV NODE_ENV=production
