@@ -156,6 +156,16 @@ async function getTorStatus(): Promise<TorStatus> {
 export async function GET() {
     try {
         const status = await getTorStatus();
+
+        // If connected but no circuit data, provide a fallback with server info
+        if (status.circuitEstablished && !status.circuit && status.exitIp) {
+            status.circuit = {
+                guard: { nickname: 'Guard Node', ip: 'Protected', country: 'Unknown' },
+                middle: { nickname: 'Relay Node', ip: 'Hidden', country: 'Unknown' },
+                exit: { nickname: 'Exit Node', ip: status.exitIp, country: 'Unknown' }
+            };
+        }
+
         return NextResponse.json(status);
     } catch (error) {
         console.error('[TOR-STATUS] Error:', error);

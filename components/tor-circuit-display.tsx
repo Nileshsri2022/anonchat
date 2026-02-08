@@ -188,16 +188,12 @@ export function TorCircuitDisplay() {
                     </DialogTitle>
                 </DialogHeader>
 
-                {!isElectron ? (
-                    <div className="py-4 text-center text-muted-foreground">
-                        <p>Circuit details only available in Electron app</p>
-                        <p className="text-sm mt-2">Current IP: {exitIP}</p>
-                    </div>
-                ) : error || !circuit ? (
+                {error || !circuit ? (
                     <div className="py-4 space-y-3">
                         <p className="text-sm text-muted-foreground text-center">
                             {error || 'Loading circuit...'}
                         </p>
+                        <p className="text-sm text-center">Current IP: {exitIP}</p>
                         <Button
                             onClick={fetchCircuitInfo}
                             className="w-full"
