@@ -5,8 +5,9 @@ const next = require('next');
 const { Server: SocketIOServer } = require('socket.io');
 
 const dev = process.env.NODE_ENV !== 'production';
-// Use 0.0.0.0 in production to accept external connections (required for Render/Docker)
-const hostname = process.env.HOSTNAME || (dev ? 'localhost' : '0.0.0.0');
+// In dev mode: always use localhost (Windows sets HOSTNAME to computer name)
+// In production: use HOSTNAME env var or 0.0.0.0 for Docker/Render
+const hostname = dev ? 'localhost' : (process.env.HOSTNAME || '0.0.0.0');
 const port = parseInt(process.env.PORT || '3000', 10);
 
 const app = next({ dev, hostname, port });
