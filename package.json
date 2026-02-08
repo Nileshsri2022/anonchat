@@ -10,17 +10,17 @@
   },
   "scripts": {
     "build": "next build",
-    "dev": "node server.js",
+    "dev": "bun run server.js",
     "lint": "next lint",
-    "start": "node server.js",
+    "start": "bun run server.js",
     "electron": "electron .",
-    "electron-dev": "concurrently \"cross-env BROWSER=none node server.js\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-dev": "concurrently \"cross-env BROWSER=none bun run server.js\" \"wait-on http://localhost:3000 && electron .\"",
     "build:next": "next build",
-    "build:electron": "npm run build:next && electron-builder",
-    "build:win": "npm run build:next && electron-builder --win",
-    "build:mac": "npm run build:next && electron-builder --mac",
-    "build:linux": "npm run build:next && electron-builder --linux",
-    "dist": "npm run build:electron"
+    "build:electron": "bun run build:next && electron-builder",
+    "build:win": "bun run build:next && electron-builder --win",
+    "build:mac": "bun run build:next && electron-builder --mac",
+    "build:linux": "bun run build:next && electron-builder --linux",
+    "dist": "bun run build:electron"
   },
   "build": {
     "appId": "com.anonchat.app",
