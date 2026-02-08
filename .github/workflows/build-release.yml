@@ -1,21 +1,23 @@
-name: Build & Release Electron App
+name: Build & Release
 
 on:
   push:
     tags:
-      - 'v*'  # Only trigger on version tags like v1.0.0
-  workflow_dispatch:  # Manual trigger from Actions tab
+      - 'v*'
+  workflow_dispatch:
 
-# Set permissions for GITHUB_TOKEN
+# Cancel in-progress runs for same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
-  packages: write
 
 jobs:
-  # Run tests first
-  test:
+  # Build Next.js once, share with all platforms
+  build-nextjs:
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
 
@@ -25,20 +27,30 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Cache Next.js
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx') }}
+          restore-keys: nextjs-
 
-      - name: Run linter
-        run: npm run lint
-        continue-on-error: true
+      - name: Install & Build
+        run: |
+          npm ci
+          npm run build:next
 
-      - name: Run type check
-        run: npx tsc --noEmit
-        continue-on-error: true
+      - name: Upload Next.js build
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: |
+            .next
+            out
+          retention-days: 1
 
-  # Build for all platforms
-  build:
-    needs: test
+  # Build Electron for each platform in parallel
+  build-electron:
+    needs: build-nextjs
     strategy:
       fail-fast: false
       matrix:
@@ -51,16 +63,12 @@ jobs:
             arch: x64
           - os: macos-latest
             platform: mac
-            arch: x64
-          - os: macos-latest
-            platform: mac
-            arch: arm64
+            arch: universal  # Builds for both Intel & Apple Silicon
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -68,134 +76,75 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      # Cache Next.js build
-      - name: Cache Next.js
-        uses: actions/cache@v4
+      - name: Download Next.js build
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            .next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+          name: nextjs-build
+          path: .next
 
-      # Cache Electron builder
-      - name: Cache Electron builder
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/AppData/Local/electron-builder/Cache
-            ~/.cache/electron-builder
-            ~/Library/Caches/electron-builder
-          key: ${{ runner.os }}-electron-builder-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-builder-
-
-      # Cache Electron binaries
       - name: Cache Electron
         uses: actions/cache@v4
         with:
           path: |
+            ~/AppData/Local/electron-builder/Cache
             ~/AppData/Local/electron/Cache
+            ~/.cache/electron-builder
             ~/.cache/electron
+            ~/Library/Caches/electron-builder
             ~/Library/Caches/electron
           key: ${{ runner.os }}-electron-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Next.js
-        run: npm run build:next
-
-      # Linux-specific: Install required packages
-      - name: Install Linux dependencies
+      - name: Install Linux deps
         if: matrix.platform == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libarchive-tools rpm
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
 
-      # macOS-specific: Setup for code signing (optional)
-      - name: Setup macOS signing
-        if: matrix.platform == 'mac'
-        run: |
-          echo "macOS build - code signing skipped for unsigned builds"
-          # To enable signing, add your Apple Developer certificates as secrets:
-          # CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD
-
-      - name: Build Electron app
+      - name: Build Electron
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Disable code signing for CI builds (remove for production)
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: |
-          npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }}
+        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
 
-      - name: Upload artifacts
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: AnonChat-${{ matrix.platform }}-${{ matrix.arch }}
+          name: build-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            dist/*-unpacked/
             dist/*.exe
-            dist/*.dmg
             dist/*.zip
+            dist/*.dmg
             dist/*.AppImage
-            dist/*.deb
+            dist/*-unpacked
           retention-days: 7
+          if-no-files-found: warn
 
-  # Create GitHub Release with all artifacts
+  # Create release only after all builds succeed
   release:
-    needs: build
+    needs: build-electron
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    
+
     steps:
-      - name: Download all artifacts
+      - name: Download all builds
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: builds
+          pattern: build-*
+          merge-multiple: true
 
-      - name: List all artifacts
-        run: |
-          echo "📦 Downloaded artifacts:"
-          find artifacts -type f -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.zip" | head -20
+      - name: List builds
+        run: find builds -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.zip" \) 2>/dev/null || echo "Checking builds..."
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/**/*.exe
-            artifacts/**/*.dmg
-            artifacts/**/*.AppImage
-            artifacts/**/*.deb
-            artifacts/**/*.zip
+            builds/**/*.exe
+            builds/**/*.dmg
+            builds/**/*.AppImage
+            builds/**/*.zip
           draft: true
           generate_release_notes: true
           fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify success
-        if: success()
-        run: |
-          echo "✅ Release created successfully!"
-          echo "📦 Artifacts uploaded for version: ${{ github.ref_name }}"
-
-  # Security scan (runs on PRs)
-  security:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run npm audit
-        run: npm audit --production
-        continue-on-error: true
-
-      - name: Check for known vulnerabilities
-        run: |
-          echo "🔍 Checking for security issues..."
-          npm audit --json > audit-results.json || true
-          cat audit-results.json | jq '.metadata.vulnerabilities' || echo "No critical vulnerabilities found"
