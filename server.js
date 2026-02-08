@@ -5,7 +5,8 @@ const next = require('next');
 const { Server: SocketIOServer } = require('socket.io');
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
+// Use 0.0.0.0 in production to accept external connections (required for Render/Docker)
+const hostname = process.env.HOSTNAME || (dev ? 'localhost' : '0.0.0.0');
 const port = parseInt(process.env.PORT || '3000', 10);
 
 const app = next({ dev, hostname, port });
@@ -66,7 +67,7 @@ app.prepare().then(() => {
         });
     });
 
-    server.listen(port, () => {
+    server.listen(port, hostname, () => {
         console.log(`> Ready on http://${hostname}:${port}`);
         console.log(`> Socket.IO ready`);
     });
