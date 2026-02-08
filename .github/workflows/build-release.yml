@@ -14,44 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  # Step 1: Build Next.js once
-  build-nextjs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Cache Next.js
-        uses: actions/cache@v4
-        with:
-          path: .next/cache
-          key: nextjs-${{ hashFiles('package-lock.json') }}
-          restore-keys: nextjs-
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Next.js
-        run: npm run build:next
-
-      - name: Verify build
-        run: ls -la .next
-
-      - name: Upload Next.js build
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextjs-build
-          path: .next
-          retention-days: 1
-
-  # Step 2: Build Electron for all platforms
-  build-electron:
-    needs: build-nextjs
+  build:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -76,11 +39,11 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Download Next.js build
-        uses: actions/download-artifact@v4
+      - name: Cache Next.js
+        uses: actions/cache@v4
         with:
-          name: nextjs-build
-          path: .next
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}
 
       - name: Cache Electron
         uses: actions/cache@v4
@@ -97,6 +60,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build Next.js
+        run: npm run build:next
+
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
@@ -110,35 +76,48 @@ jobs:
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.platform }}-${{ matrix.arch }}
+          name: ${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             dist/*.exe
             dist/*.dmg
             dist/*.AppImage
             dist/*.zip
-          retention-days: 7
           if-no-files-found: warn
 
-  # Step 3: Create release
   release:
-    needs: build-electron
+    needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+
     steps:
-      - name: Download all builds
+      - name: Download Windows
         uses: actions/download-artifact@v4
         with:
-          path: builds
-          pattern: build-*
-          merge-multiple: true
+          name: win-x64
+          path: release
+        continue-on-error: true
+
+      - name: Download Linux
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x64
+          path: release
+        continue-on-error: true
+
+      - name: Download macOS
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-x64
+          path: release
+        continue-on-error: true
 
       - name: List files
-        run: find builds -type f || echo "No files"
+        run: ls -la release/ || echo "No release files"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: builds/*
+          files: release/*
           draft: true
           generate_release_notes: true
           fail_on_unmatched_files: false

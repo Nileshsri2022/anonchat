@@ -1,6 +1,6 @@
 {
   "name": "anonchat",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "Anonymous encrypted chat over Tor network",
   "author": "AnonChat Team",
