@@ -57,6 +57,11 @@ export class TorIntegration {
   }
 
   private async connectTorControl(): Promise<boolean> {
+    // Skip during build/SSG - Tor isn't available on build servers
+    if (typeof window === 'undefined' && process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV) {
+      return false;
+    }
+
     return new Promise((resolve) => {
       if (this.controlSocket && !this.controlSocket.destroyed) {
         resolve(true);
@@ -71,13 +76,12 @@ export class TorIntegration {
         resolve(true);
       });
 
-      this.controlSocket.on('error', (error) => {
-        console.error('Tor control connection error:', error);
+      this.controlSocket.on('error', () => {
+        // Silently fail - Tor not running is expected in many environments
         resolve(false);
       });
 
       this.controlSocket.on('timeout', () => {
-        console.error('Tor control connection timeout');
         resolve(false);
       });
 
