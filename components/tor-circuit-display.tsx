@@ -26,44 +26,42 @@ interface CircuitInfo {
     };
 }
 
-// Country name to flag emoji mapping
+// Country code to flag emoji mapping (2-letter ISO codes)
 const countryFlags: Record<string, string> = {
-    'Germany': '🇩🇪',
-    'France': '🇫🇷',
-    'The Netherlands': '🇳🇱',
-    'Netherlands': '🇳🇱',
-    'United States': '🇺🇸',
-    'United Kingdom': '🇬🇧',
-    'Finland': '🇫🇮',
-    'Sweden': '🇸🇪',
-    'Switzerland': '🇨🇭',
-    'Canada': '🇨🇦',
-    'Romania': '🇷🇴',
-    'Luxembourg': '🇱🇺',
-    'Iceland': '🇮🇸',
-    'Norway': '🇳🇴',
-    'Austria': '🇦🇹',
-    'Belgium': '🇧🇪',
-    'Denmark': '🇩🇰',
-    'Spain': '🇪🇸',
-    'Italy': '🇮🇹',
-    'Poland': '🇵🇱',
-    'Czech Republic': '🇨🇿',
-    'Czechia': '🇨🇿',
-    'Ireland': '🇮🇪',
-    'Portugal': '🇵🇹',
-    'Japan': '🇯🇵',
-    'Singapore': '🇸🇬',
-    'Australia': '🇦🇺',
-    'Brazil': '🇧🇷',
-    'Russia': '🇷🇺',
-    'Ukraine': '🇺🇦',
-    'Bulgaria': '🇧🇬',
-    'Hungary': '🇭🇺',
-    'Moldova': '🇲🇩',
-    'Latvia': '🇱🇻',
-    'Lithuania': '🇱🇹',
-    'Estonia': '🇪🇪',
+    'DE': '🇩🇪', // Germany
+    'FR': '🇫🇷', // France
+    'NL': '🇳🇱', // Netherlands
+    'US': '🇺🇸', // United States
+    'GB': '🇬🇧', // United Kingdom
+    'FI': '🇫🇮', // Finland
+    'SE': '🇸🇪', // Sweden
+    'CH': '🇨🇭', // Switzerland
+    'CA': '🇨🇦', // Canada
+    'RO': '🇷🇴', // Romania
+    'LU': '🇱🇺', // Luxembourg
+    'IS': '🇮🇸', // Iceland
+    'NO': '🇳🇴', // Norway
+    'AT': '🇦🇹', // Austria
+    'BE': '🇧🇪', // Belgium
+    'DK': '🇩🇰', // Denmark
+    'ES': '🇪🇸', // Spain
+    'IT': '🇮🇹', // Italy
+    'PL': '🇵🇱', // Poland
+    'CZ': '🇨🇿', // Czech Republic
+    'IE': '🇮🇪', // Ireland
+    'PT': '🇵🇹', // Portugal
+    'JP': '🇯🇵', // Japan
+    'SG': '🇸🇬', // Singapore
+    'AU': '🇦🇺', // Australia
+    'BR': '🇧🇷', // Brazil
+    'RU': '🇷🇺', // Russia
+    'UA': '🇺🇦', // Ukraine
+    'BG': '🇧🇬', // Bulgaria
+    'HU': '🇭🇺', // Hungary
+    'MD': '🇲🇩', // Moldova
+    'LV': '🇱🇻', // Latvia
+    'LT': '🇱🇹', // Lithuania
+    'EE': '🇪🇪', // Estonia
     'Unknown': '🌐',
 };
 
@@ -222,8 +220,11 @@ export function TorCircuitDisplay() {
                                             <span className="text-lg" title={circuit.hops.guard.country}>
                                                 {getCountryFlag(circuit.hops.guard.country)}
                                             </span>
+                                            <span className="text-sm font-semibold text-foreground">
+                                                {circuit.hops.guard.country || '??'}
+                                            </span>
                                             <span className="text-xs text-muted-foreground font-mono">
-                                                {circuit.hops.guard.ip}
+                                                {circuit.hops.guard.ip || 'Unknown'}
                                             </span>
                                             <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
                                                 Guard
@@ -245,8 +246,11 @@ export function TorCircuitDisplay() {
                                             <span className="text-lg" title={circuit.hops.middle.country}>
                                                 {getCountryFlag(circuit.hops.middle.country)}
                                             </span>
+                                            <span className="text-sm font-semibold text-foreground">
+                                                {circuit.hops.middle.country || '??'}
+                                            </span>
                                             <span className="text-xs text-muted-foreground font-mono">
-                                                {circuit.hops.middle.ip}
+                                                {circuit.hops.middle.ip || 'Unknown'}
                                             </span>
                                         </div>
                                         <div className="text-xs text-muted-foreground">
@@ -265,8 +269,11 @@ export function TorCircuitDisplay() {
                                             <span className="text-lg" title={circuit.hops.exit.country}>
                                                 {getCountryFlag(circuit.hops.exit.country)}
                                             </span>
+                                            <span className="text-sm font-semibold text-foreground">
+                                                {circuit.hops.exit.country || '??'}
+                                            </span>
                                             <span className="text-xs text-muted-foreground font-mono">
-                                                {circuit.hops.exit.ip}
+                                                {circuit.hops.exit.ip || 'Unknown'}
                                             </span>
                                         </div>
                                         <div className="text-xs text-muted-foreground">

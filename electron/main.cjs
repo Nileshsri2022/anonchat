@@ -78,17 +78,18 @@ function sendTorCommand(command) {
   });
 }
 
-// GeoIP lookup to get country for an IP (uses direct HTTP, not proxied)
+// GeoIP lookup to get country CODE for an IP (uses direct HTTP, not proxied)
 function getCountry(ip) {
   return new Promise((resolve) => {
     const http = require('http');
-    const req = http.get(`http://ip-api.com/json/${ip}?fields=country`, (res) => {
+    // Request countryCode (2-letter code like "FI", "DE", "PL") for circuit display
+    const req = http.get(`http://ip-api.com/json/${ip}?fields=countryCode`, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          resolve(json.country || 'Unknown');
+          resolve(json.countryCode || 'Unknown');
         } catch {
           resolve('Unknown');
         }
