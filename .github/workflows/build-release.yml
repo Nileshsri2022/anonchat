@@ -6,7 +6,6 @@ on:
       - 'v*'
   workflow_dispatch:
 
-# Cancel in-progress runs for same ref
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,7 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  # Build Next.js once, share with all platforms
+  # Step 1: Build Next.js once
   build-nextjs:
     runs-on: ubuntu-latest
     steps:
@@ -31,26 +30,29 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .next/cache
-          key: nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx') }}
+          key: nextjs-${{ hashFiles('package-lock.json') }}
           restore-keys: nextjs-
 
-      - name: Install & Build
-        run: |
-          npm ci
-          npm run build:next
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js
+        run: npm run build:next
+
+      - name: Verify build
+        run: ls -la .next
 
       - name: Upload Next.js build
         uses: actions/upload-artifact@v4
         with:
           name: nextjs-build
-          path: |
-            .next
-            out
+          path: .next
           retention-days: 1
 
-  # Build Electron for each platform in parallel
+  # Step 2: Build Electron for all platforms
   build-electron:
     needs: build-nextjs
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -63,9 +65,7 @@ jobs:
             arch: x64
           - os: macos-latest
             platform: mac
-            arch: universal  # Builds for both Intel & Apple Silicon
-
-    runs-on: ${{ matrix.os }}
+            arch: x64
 
     steps:
       - uses: actions/checkout@v4
@@ -86,18 +86,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/AppData/Local/electron-builder/Cache
-            ~/AppData/Local/electron/Cache
-            ~/.cache/electron-builder
             ~/.cache/electron
-            ~/Library/Caches/electron-builder
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron
+            ~/AppData/Local/electron-builder
             ~/Library/Caches/electron
-          key: ${{ runner.os }}-electron-${{ hashFiles('**/package-lock.json') }}
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Linux deps
+      - name: Install Linux dependencies
         if: matrix.platform == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
 
@@ -113,19 +113,17 @@ jobs:
           name: build-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             dist/*.exe
-            dist/*.zip
             dist/*.dmg
             dist/*.AppImage
-            dist/*-unpacked
+            dist/*.zip
           retention-days: 7
           if-no-files-found: warn
 
-  # Create release only after all builds succeed
+  # Step 3: Create release
   release:
     needs: build-electron
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-
     steps:
       - name: Download all builds
         uses: actions/download-artifact@v4
@@ -134,17 +132,13 @@ jobs:
           pattern: build-*
           merge-multiple: true
 
-      - name: List builds
-        run: find builds -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.zip" \) 2>/dev/null || echo "Checking builds..."
+      - name: List files
+        run: find builds -type f || echo "No files"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            builds/**/*.exe
-            builds/**/*.dmg
-            builds/**/*.AppImage
-            builds/**/*.zip
+          files: builds/*
           draft: true
           generate_release_notes: true
           fail_on_unmatched_files: false
