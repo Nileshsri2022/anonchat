@@ -1,6 +1,12 @@
-# Use official Bun image
-FROM oven/bun:1 AS base
+# Use Bun with Debian (has build tools)
+FROM oven/bun:1-debian AS base
 WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
 FROM base AS deps
@@ -14,8 +20,10 @@ COPY . .
 RUN bun run build
 
 # Production
-FROM base AS runner
+FROM oven/bun:1-debian AS runner
+WORKDIR /app
 ENV NODE_ENV=production
+
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
