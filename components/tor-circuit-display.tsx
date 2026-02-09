@@ -217,14 +217,15 @@ export function TorCircuitDisplay() {
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-lg" title={circuit.hops.guard.country}>
-                                                {getCountryFlag(circuit.hops.guard.country)}
+                                            <span className="text-sm font-bold text-foreground">
+                                                {circuit.hops.guard.country && circuit.hops.guard.country !== 'Unknown'
+                                                    ? circuit.hops.guard.country
+                                                    : '??'}
                                             </span>
-                                            <span className="text-sm font-semibold text-foreground">
-                                                {circuit.hops.guard.country || '??'}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground font-mono">
-                                                {circuit.hops.guard.ip || 'Unknown'}
+                                            <span className="text-sm text-muted-foreground font-mono">
+                                                {circuit.hops.guard.ip && circuit.hops.guard.ip !== 'Unknown'
+                                                    ? circuit.hops.guard.ip
+                                                    : ''}
                                             </span>
                                             <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
                                                 Guard
@@ -243,14 +244,15 @@ export function TorCircuitDisplay() {
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-lg" title={circuit.hops.middle.country}>
-                                                {getCountryFlag(circuit.hops.middle.country)}
+                                            <span className="text-sm font-bold text-foreground">
+                                                {circuit.hops.middle.country && circuit.hops.middle.country !== 'Unknown'
+                                                    ? circuit.hops.middle.country
+                                                    : '??'}
                                             </span>
-                                            <span className="text-sm font-semibold text-foreground">
-                                                {circuit.hops.middle.country || '??'}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground font-mono">
-                                                {circuit.hops.middle.ip || 'Unknown'}
+                                            <span className="text-sm text-muted-foreground font-mono">
+                                                {circuit.hops.middle.ip && circuit.hops.middle.ip !== 'Unknown'
+                                                    ? circuit.hops.middle.ip
+                                                    : ''}
                                             </span>
                                         </div>
                                         <div className="text-xs text-muted-foreground">
@@ -266,14 +268,15 @@ export function TorCircuitDisplay() {
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-lg" title={circuit.hops.exit.country}>
-                                                {getCountryFlag(circuit.hops.exit.country)}
+                                            <span className="text-sm font-bold text-foreground">
+                                                {circuit.hops.exit.country && circuit.hops.exit.country !== 'Unknown'
+                                                    ? circuit.hops.exit.country
+                                                    : '??'}
                                             </span>
-                                            <span className="text-sm font-semibold text-foreground">
-                                                {circuit.hops.exit.country || '??'}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground font-mono">
-                                                {circuit.hops.exit.ip || 'Unknown'}
+                                            <span className="text-sm text-muted-foreground font-mono">
+                                                {circuit.hops.exit.ip && circuit.hops.exit.ip !== 'Unknown'
+                                                    ? circuit.hops.exit.ip
+                                                    : ''}
                                             </span>
                                         </div>
                                         <div className="text-xs text-muted-foreground">

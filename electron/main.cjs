@@ -108,15 +108,13 @@ async function getCircuitInfo() {
     // Get circuit status (sendTorCommand handles authentication)
     const response = await sendTorCommand('GETINFO circuit-status');
     console.log('📡 Circuit response length:', response.length);
-    console.log('📡 Circuit response (first 500 chars):', response.substring(0, 500));
 
     // Parse circuits
     const lines = response.split('\r\n');
     let circuitLine = null;
 
     for (const line of lines) {
-      console.log('  Line:', line.substring(0, 80));
-      if (line.includes('BUILT') && !line.includes('HS_SERVICE')) {
+      if (line.includes('BUILT') && !line.includes('HS_SERVICE') && !line.includes('INTRO') && !line.includes('REND')) {
         circuitLine = line;
         break;
       }
@@ -127,7 +125,7 @@ async function getCircuitInfo() {
       return null;
     }
 
-    console.log('✅ Found circuit:', circuitLine.substring(0, 100));
+    console.log('✅ Found circuit:', circuitLine.substring(0, 120));
 
     const parts = circuitLine.split(' ');
     const circuitId = parts[0];
@@ -135,13 +133,13 @@ async function getCircuitInfo() {
 
     console.log('📍 Path string:', pathStr);
 
-    // Extract fingerprints from path
+    // Extract fingerprints from path (format: $FP1~name1,$FP2~name2,$FP3~name3)
     const fingerprints = pathStr.split(',').map(n => {
-      const match = n.match(/\$([A-F0-9]+)/);
+      const match = n.match(/\$([A-F0-9]+)/i);
       return match ? match[1] : null;
     }).filter(Boolean);
 
-    console.log('🔑 Fingerprints found:', fingerprints.length);
+    console.log('🔑 Fingerprints found:', fingerprints.length, fingerprints.map(f => f.substring(0, 8) + '...'));
 
     if (fingerprints.length < 3) {
       console.log('❌ Not enough fingerprints:', fingerprints);
@@ -150,26 +148,64 @@ async function getCircuitInfo() {
 
     // Get node info for each hop
     const hops = [];
-    for (const fp of fingerprints) {
+    for (let i = 0; i < fingerprints.length && i < 3; i++) {
+      const fp = fingerprints[i];
       try {
+        console.log(`\n🔍 Fetching node info for hop ${i + 1}: ${fp.substring(0, 8)}...`);
         const nodeResp = await sendTorCommand(`GETINFO ns/id/${fp}`);
+        console.log(`📄 Response (first 300 chars):`, nodeResp.substring(0, 300));
+
+        // Find the 'r' line which contains router info
         const rLine = nodeResp.split('\r\n').find(l => l.startsWith('r '));
+
         if (rLine) {
+          console.log(`📋 Parsing r line: ${rLine}`);
+
+          // Format: r <nickname> <identity> <digest> <date> <time> <IP> <ORPort> <DirPort>
+          // Example: r NForce A53C46F5... ABCD... 2024-01-15 10:30:00 185.107.57.105 9001 0
           const p = rLine.split(' ');
+          console.log(`   Parts count: ${p.length}`);
+          console.log(`   Parts: [${p.slice(0, 8).join(', ')}]`);
+
+          // parts[0] = "r"
+          // parts[1] = nickname
+          // parts[2] = identity (base64)
+          // parts[3] = digest (base64)
+          // parts[4] = date (YYYY-MM-DD)
+          // parts[5] = time (HH:MM:SS)
+          // parts[6] = IP address
+          // parts[7] = ORPort
+          // parts[8] = DirPort
+
+          const nickname = p[1] || 'Unknown';
           const ip = p[6] || 'Unknown';
-          const country = await getCountry(ip);
-          hops.push({
-            nickname: p[1] || 'Unknown',
-            ip,
-            country
-          });
+
+          console.log(`   Extracted: nickname=${nickname}, ip=${ip}`);
+
+          // Validate IP format (should be x.x.x.x)
+          const isValidIP = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip);
+          console.log(`   IP valid: ${isValidIP}`);
+
+          let country = 'Unknown';
+          if (isValidIP) {
+            country = await getCountry(ip);
+            console.log(`   Country: ${country}`);
+          } else {
+            console.log(`   ⚠️ Invalid IP format, skipping GeoIP lookup`);
+          }
+
+          hops.push({ nickname, ip: isValidIP ? ip : 'Unknown', country });
         } else {
+          console.log(`   ⚠️ No 'r' line found in response`);
           hops.push({ nickname: 'Unknown', ip: 'Unknown', country: 'Unknown' });
         }
-      } catch {
+      } catch (err) {
+        console.log(`   ❌ Error fetching node info: ${err.message}`);
         hops.push({ nickname: 'Unknown', ip: 'Unknown', country: 'Unknown' });
       }
     }
+
+    console.log('\n📊 Final hops:', JSON.stringify(hops, null, 2));
 
     return {
       circuitId,
