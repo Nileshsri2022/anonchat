@@ -19,8 +19,9 @@ const crypto = globalThis.crypto || webcrypto;
 export interface MessageEnvelope {
   version: number;
   channelId: string;
-  senderId: string;
-  senderIdentityPublic: string; // base64 SPKI or JWK
+  /** v2 only — sealed Envelope v3 carries NO sender identity on the wire (ADR-0007). */
+  senderId?: string;
+  senderIdentityPublic?: string; // base64 SPKI or JWK; v3 omits entirely
   header: {
     dhPublic: string;
     /** ML-KEM-768 ciphertext (base64) on the FIRST envelope of a hybrid handshake (ADR-0006). */
@@ -44,12 +45,17 @@ export interface DecryptedMessage {
   timestamp: number;
   ttl?: number;
   expiresAt?: number;
+  /** Sealed sender: who sent this is a decryption OUTPUT, not a wire field (ADR-0007). */
+  senderIdentityPublic?: string;
 }
 
 export interface DirectMessageSessionConfig {
   selfUserId: string;
   selfIdentityKeys: IdentityKeys;
   selfPreKeys?: PreKeys;
+  /** Signing keypair — the initiator signs its ephemeral so the responder can
+   *  authenticate the sealed first payload (ADR-0007, Envelope v3). */
+  selfSigningKeys?: { publicKey: CryptoKey; privateKey: CryptoKey };
   /** Upper bound for the Skipped-Key Cache (default 1000). */
   maxSkippedKeys?: number;
   /** ML-KEM decapsulation capability — the responder side of the hybrid handshake (ADR-0006). */
@@ -90,8 +96,11 @@ export class DirectMessageSession {
   private previousChainLength = 0;
 
   private readonly pqDecapsulate?: (cipherText: Uint8Array) => Promise<Uint8Array<ArrayBuffer>>;
+  private readonly selfSigningKeys?: { publicKey: CryptoKey; privateKey: CryptoKey };
   /** Initiator-only: KEM ciphertext sent on the FIRST envelope of a hybrid session. */
   private pendingPqCiphertext?: string;
+  /** Initiator-only: signature over our first ephemeral, sent inside the sealed first payload. */
+  private pendingSenderSignature?: string;
 
   // Skipped-key cache for out-of-order message delivery (max 1000 keys)
   private skippedKeys = new Map<string, ArrayBuffer>();
@@ -108,6 +117,7 @@ export class DirectMessageSession {
     this.selfIdentityKeys = config.selfIdentityKeys;
     this.selfPreKeys = config.selfPreKeys;
     this.pqDecapsulate = config.pqDecapsulate;
+    this.selfSigningKeys = config.selfSigningKeys;
     this.MAX_SKIPPED_KEYS = config.maxSkippedKeys ?? 1000;
   }
 
@@ -150,23 +160,6 @@ export class DirectMessageSession {
       ['deriveBits']
     );
 
-    // X3DH calculation using sendDH:
-    const dhIdentityPreKey = await crypto.subtle.deriveBits(
-      { name: 'ECDH', public: remotePreKey },
-      this.selfIdentityKeys.privateKey,
-      256
-    );
-    const dhEphemeralIdentity = await crypto.subtle.deriveBits(
-      { name: 'ECDH', public: remoteIdentityKey },
-      this.sendDH.privateKey,
-      256
-    );
-    const dhEphemeralPreKey = await crypto.subtle.deriveBits(
-      { name: 'ECDH', public: remotePreKey },
-      this.sendDH.privateKey,
-      256
-    );
-
     // Hybrid PQ share (ADR-0006): encapsulate against the Contact's ML-KEM key when published.
     // Defense in depth: re-verify the PQ key's signature at the point of use (the Pre-Key
     // signature gets the same treatment above), so an unvalidated Contact cannot steer
@@ -191,10 +184,34 @@ export class DirectMessageSession {
       this.pendingPqCiphertext = this.bytesToB64(encapsulated.cipherText);
     }
 
+    // Sealed-sender handshake (ADR-0007): DH1 (identity x pre-key) is DROPPED on v3 —
+    // the responder must not need our identity before decryption. Our identity key +
+    // a signature over the ephemeral ride INSIDE the encrypted first payload instead.
+    const dhEphemeralIdentity = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: remoteIdentityKey },
+      this.sendDH.privateKey,
+      256
+    );
+    const dhEphemeralPreKey = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: remotePreKey },
+      this.sendDH.privateKey,
+      256
+    );
+
+    if (this.selfSigningKeys) {
+      const ephemeralStr = await this.exportKeyToString(this.sendDH.publicKey);
+      const sig = await crypto.subtle.sign(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        this.selfSigningKeys.privateKey,
+        new TextEncoder().encode(`anonchat-ephemeral-v3|${ephemeralStr}`),
+      );
+      this.pendingSenderSignature = this.bytesToB64(new Uint8Array(sig));
+    }
+
     const masterSharedSecret = await this.computeX3DHSecret(
-      dhIdentityPreKey,
       dhEphemeralIdentity,
       dhEphemeralPreKey,
+      undefined,
       pqShared
     );
 
@@ -216,16 +233,18 @@ export class DirectMessageSession {
       throw new Error('Cannot initialize responder session without pre-keys');
     }
 
-    const remoteIdentityKey = await this.importKeyFromString(envelope.senderIdentityPublic, 'public');
+    const sealed = envelope.version === 3;
+    // v2 carries the sender identity on the wire; v3 (sealed, ADR-0007) must not
+    // need it before decryption — the identity arrives inside the first payload.
+    const remoteIdentityKey = sealed
+      ? undefined
+      : await this.importKeyFromString(envelope.senderIdentityPublic!, 'public');
+    if (!sealed) {
+      this.recipientIdentityPublicCanonical = await this.exportKeyToString(remoteIdentityKey!);
+    }
     const remoteDH = await this.importKeyFromString(envelope.header.dhPublic, 'public');
-    this.recipientIdentityPublicCanonical = await this.exportKeyToString(remoteIdentityKey);
 
     // Bob X3DH:
-    const dhPreKeyIdentity = await crypto.subtle.deriveBits(
-      { name: 'ECDH', public: remoteIdentityKey },
-      this.selfPreKeys.privateKey,
-      256
-    );
     const dhIdentityEphemeral = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: remoteDH },
       this.selfIdentityKeys.privateKey,
@@ -236,6 +255,13 @@ export class DirectMessageSession {
       this.selfPreKeys.privateKey,
       256
     );
+    const dhPreKeyIdentity = sealed
+      ? undefined
+      : await crypto.subtle.deriveBits(
+          { name: 'ECDH', public: remoteIdentityKey! },
+          this.selfPreKeys.privateKey,
+          256
+        );
 
     // Hybrid PQ share (ADR-0006): a KEM ciphertext on the handshake envelope MUST be
     // decapsulatable — the initiator already derived the hybrid root, so degrading to
@@ -248,12 +274,9 @@ export class DirectMessageSession {
       pqShared = await this.pqDecapsulate(this.b64ToBytes(envelope.header.pqCiphertext));
     }
 
-    const masterSharedSecret = await this.computeX3DHSecret(
-      dhPreKeyIdentity,
-      dhIdentityEphemeral,
-      dhPreKeyEphemeral,
-      pqShared
-    );
+    const masterSharedSecret = sealed
+      ? await this.computeX3DHSecret(dhIdentityEphemeral, dhPreKeyEphemeral, undefined, pqShared)
+      : await this.computeX3DHSecret(dhPreKeyIdentity!, dhIdentityEphemeral, dhPreKeyEphemeral, pqShared);
 
     this.rootKey = masterSharedSecret;
     this.recvChainKey = masterSharedSecret;
@@ -277,8 +300,13 @@ export class DirectMessageSession {
     this.rootKey = nextRoot;
     this.sendChainKey = sendChain;
 
-    const selfPublicStr = await this.exportKeyToString(this.selfIdentityKeys.publicKey);
-    this.channelId = envelope.channelId || (await derivePairwiseChannelId(selfPublicStr, envelope.senderIdentityPublic));
+    if (sealed) {
+      // Sealed sender: the Pairwise Channel is on the wire (routing requires it).
+      this.channelId = envelope.channelId;
+    } else {
+      const selfPublicStr = await this.exportKeyToString(this.selfIdentityKeys.publicKey);
+      this.channelId = envelope.channelId || (await derivePairwiseChannelId(selfPublicStr, envelope.senderIdentityPublic!));
+    }
   }
 
   /**
@@ -311,12 +339,31 @@ export class DirectMessageSession {
     const dhPublicStr = await this.exportKeyToString(this.sendDH.publicKey);
     const selfIdPublicStr = await this.exportKeyToString(this.selfIdentityKeys.publicKey);
 
-    // Bind the wire context (channel + both identities) into the ciphertext (ADR-0005)
-    const aad = await this.envelopeAad(this.channelId, selfIdPublicStr, this.recipientIdentityPublicCanonical);
+    // Envelope v3 (ADR-0007): sealed sender. The plaintext is a JSON payload so the
+    // FIRST message can carry {ik, sig} — identity + ephemeral signature — inside the
+    // ciphertext; later messages carry only the content.
+    const firstMessage = currentMsgNumber === 0 && this.pendingSenderSignature !== undefined;
+    const payload = JSON.stringify({
+      v: 3,
+      c: content,
+      ...(firstMessage && this.selfSigningKeys
+        ? {
+            ik: selfIdPublicStr,
+            // signing key travels too — the signature binds the ephemeral to it;
+            // the ik<->sk binding itself is SAS-verified out-of-band (TOFU unchanged)
+            sk: await this.exportKeyToString(this.selfSigningKeys.publicKey),
+            sig: this.pendingSenderSignature,
+          }
+        : {}),
+    });
+    if (firstMessage) this.pendingSenderSignature = undefined; // identity rides message 0 only
+
+    // v3 wire context binds channel + recipient only — the sender is sealed (ADR-0007)
+    const aad = await this.envelopeAadV3(this.channelId, this.recipientIdentityPublicCanonical);
     const encrypted = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv, additionalData: aad },
       aesKey,
-      plaintextBytes
+      new TextEncoder().encode(payload)
     );
 
     const ciphertextSlice = encrypted.slice(0, -16);
@@ -330,10 +377,8 @@ export class DirectMessageSession {
     const expiresAt = ttl && ttl > 0 ? now + ttl : undefined;
 
     const envelope: MessageEnvelope = {
-      version: 2,
+      version: 3,
       channelId: this.channelId,
-      senderId: this.selfUserId,
-      senderIdentityPublic: selfIdPublicStr,
       header: {
         dhPublic: dhPublicStr,
         n: currentMsgNumber,
@@ -366,7 +411,7 @@ export class DirectMessageSession {
    * Receive and decrypt an envelope
    */
   async receiveEnvelope(envelope: MessageEnvelope): Promise<DecryptedMessage> {
-    if (envelope.version !== 2) {
+    if (envelope.version !== 2 && envelope.version !== 3) {
       throw new Error(`Unsupported Message Envelope version: ${envelope.version}`);
     }
 
@@ -428,9 +473,13 @@ export class DirectMessageSession {
       ['decrypt']
     );
 
-    // Recompute the wire-context AAD from the envelope and our own identity
+    // Recompute the wire-context AAD: v2 binds both wire identities; v3 binds
+    // channel + recipient only — the sender is sealed inside the ciphertext.
     const selfIdPublicStr = await this.exportKeyToString(this.selfIdentityKeys.publicKey);
-    const aad = await this.envelopeAad(envelope.channelId, envelope.senderIdentityPublic, selfIdPublicStr);
+    const aad =
+      envelope.version === 3
+        ? await this.envelopeAadV3(envelope.channelId, selfIdPublicStr)
+        : await this.envelopeAad(envelope.channelId, envelope.senderIdentityPublic!, selfIdPublicStr);
 
     const decryptedBytes = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: new Uint8Array(ivBytes), additionalData: aad },
@@ -438,7 +487,40 @@ export class DirectMessageSession {
       combinedEncrypted
     );
 
-    const content = new TextDecoder().decode(decryptedBytes);
+    let content: string;
+    let senderIdentityPublic: string | undefined;
+    if (envelope.version === 3) {
+      const parsed = JSON.parse(new TextDecoder().decode(decryptedBytes)) as {
+        v: number;
+        c: string;
+        ik?: string;
+        sk?: string;
+        sig?: string;
+      };
+      content = parsed.c;
+      if (parsed.ik && parsed.sk && parsed.sig) {
+        // Sealed sender authentication: the claimed identity must prove possession of
+        // the signing key bound to THIS session's ephemeral (ADR-0007). Trust-on-first-
+        // use is unchanged: the ik<->signing-key binding is SAS-verified later.
+        await this.verifySignatureOver(
+          parsed.sk,
+          parsed.sig,
+          new TextEncoder().encode(`anonchat-ephemeral-v3|${envelope.header.dhPublic}`),
+        );
+        senderIdentityPublic = parsed.ik;
+        if (!this.recipientIdentityPublicCanonical) {
+          this.recipientIdentityPublicCanonical = parsed.ik;
+        }
+      } else if (!this.recipientIdentityPublicCanonical && envelope.header.n === 0) {
+        // Message 0 MUST introduce the sender. Later messages may arrive (out of
+        // order) before it; they attribute once message 0 lands via the skip cache.
+        throw new Error('Sealed first message carried no authenticatable sender identity');
+      }
+      senderIdentityPublic = senderIdentityPublic ?? this.recipientIdentityPublicCanonical;
+    } else {
+      content = new TextDecoder().decode(decryptedBytes);
+      senderIdentityPublic = envelope.senderIdentityPublic;
+    }
 
     // Record the consumed key so replays of this exact envelope are rejected
     this.consumedKeys.add(consumedKey);
@@ -450,7 +532,8 @@ export class DirectMessageSession {
     const decryptedMsg: DecryptedMessage = {
       id: `dm_${envelope.timestamp}_${Math.random().toString(36).substr(2, 6)}`,
       channelId: envelope.channelId,
-      senderId: envelope.senderId,
+      senderId: senderIdentityPublic ? `sealed_${senderIdentityPublic.slice(0, 8)}` : (envelope.senderId ?? 'peer'),
+      senderIdentityPublic,
       content,
       timestamp: envelope.timestamp,
       ttl: envelope.ttl,
@@ -534,6 +617,21 @@ export class DirectMessageSession {
    * protocol version, Pairwise Channel ID, sender identity, recipient identity.
    * Both peers derive the identical string from canonical SPKI base64 forms.
    */
+  /** Envelope v3 wire context: channel + recipient — no sender on a sealed envelope. */
+  private async envelopeAadV3(
+    channelId: string,
+    recipientIdentityPublic?: string,
+  ): Promise<Uint8Array<ArrayBuffer>> {
+    if (!channelId || !recipientIdentityPublic) {
+      throw new Error('Missing wire context for sealed envelope authentication');
+    }
+    const context = `anonchat-dm-v3|${channelId.trim()}|${recipientIdentityPublic.trim()}`;
+    const encoded = new TextEncoder().encode(context);
+    const out = new Uint8Array(new ArrayBuffer(encoded.byteLength));
+    out.set(encoded);
+    return out;
+  }
+
   private async envelopeAad(
     channelId: string,
     senderIdentityPublic: string,
@@ -599,13 +697,13 @@ export class DirectMessageSession {
   private async computeX3DHSecret(
     dhA: ArrayBuffer,
     dhB: ArrayBuffer,
-    dhC: ArrayBuffer,
+    dhC?: ArrayBuffer,
     pqShared?: Uint8Array<ArrayBuffer>
   ): Promise<ArrayBuffer> {
     const combinedDH = new Uint8Array([
       ...new Uint8Array(dhA),
       ...new Uint8Array(dhB),
-      ...new Uint8Array(dhC),
+      ...(dhC ? new Uint8Array(dhC) : []),
       ...(pqShared ?? []),
     ]);
     // Distinct domains keep hybrid roots from ever colliding with classical-only roots.

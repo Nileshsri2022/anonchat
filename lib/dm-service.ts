@@ -51,14 +51,30 @@ export class DirectMessageClient {
   private async newSession(): Promise<DirectMessageSession> {
     const identityKeys = await this.vault.getIdentityKeyPair();
     const preKey = await this.vault.getPreKeyPair();
+    const signing = await this.vault.getSigningKeyPair();
     return new DirectMessageSession({
       selfUserId: this.selfUserId,
       selfIdentityKeys: identityKeys,
       selfPreKeys: { id: preKey.id, publicKey: preKey.publicKey, privateKey: preKey.privateKey },
+      selfSigningKeys: signing,
       pqDecapsulate: this.vault.hasPqKem()
         ? (cipherText) => this.vault.decapsulatePq(cipherText)
         : undefined,
     });
+  }
+
+  /** Sealed sender (ADR-0007): own envelopes come back via catch-up polling; recognise
+   *  them by ciphertext hash (the wire carries no sender identity to check). */
+  private readonly recentSentHashes = new Set<string>();
+  private readonly MAX_SENT_HASHES = 500;
+
+  private rememberSent(envelope: MessageEnvelope): void {
+    const fingerprint = `${envelope.channelId}|${envelope.iv}|${envelope.ciphertext}`;
+    this.recentSentHashes.add(fingerprint);
+    if (this.recentSentHashes.size > this.MAX_SENT_HASHES) {
+      const oldest = this.recentSentHashes.values().next().value;
+      if (oldest !== undefined) this.recentSentHashes.delete(oldest);
+    }
   }
 
   /** Initiator: create (or reuse) the session for a Contact from its Identity Bundle. */
@@ -86,6 +102,7 @@ export class DirectMessageClient {
   ): Promise<MessageEnvelope> {
     const session = await this.sessionForContact(contact);
     const envelope = await session.sendMessage(content, { ttl });
+    this.rememberSent(envelope);
     if (transport) {
       const recipientInbox = await deriveInboxRoomId(contact.identity.identityPublicKey);
       await transport(envelope.channelId, envelope);
@@ -104,6 +121,7 @@ export class DirectMessageClient {
     const session = this.sessions.get(channelId);
     if (!session) throw new Error(`No session on channel ${channelId}`);
     const envelope = await session.sendMessage(content, { ttl });
+    this.rememberSent(envelope);
     if (transport) {
       const remote = this.remoteIdentityByChannel.get(channelId);
       if (remote) await transport(await deriveInboxRoomId(remote), envelope);
@@ -121,8 +139,9 @@ export class DirectMessageClient {
    */
   async handleInboundEnvelope(envelope: MessageEnvelope): Promise<DecryptedMessage | null> {
     // Catch-up polling (and multi-room fan-out) can hand us our own envelopes;
-    // they are never inbound messages.
-    if (envelope.senderIdentityPublic?.trim() === (await this.ownIdentityPublic())) {
+    // they are never inbound messages. Sealed envelopes carry no sender identity,
+    // so we recognise our own traffic by the exact (channel, iv, ciphertext) we sent.
+    if (this.recentSentHashes.has(`${envelope.channelId}|${envelope.iv}|${envelope.ciphertext}`)) {
       return null;
     }
 
@@ -140,7 +159,10 @@ export class DirectMessageClient {
       throw e;
     }
     this.sessions.set(decrypted.channelId, session);
-    this.remoteIdentityByChannel.set(decrypted.channelId, envelope.senderIdentityPublic);
+    const remoteIdentity = decrypted.senderIdentityPublic ?? envelope.senderIdentityPublic;
+    if (remoteIdentity) {
+      this.remoteIdentityByChannel.set(decrypted.channelId, remoteIdentity);
+    }
     this.messagesLog.push(decrypted);
     return decrypted;
   }
