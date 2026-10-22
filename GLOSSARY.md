@@ -25,8 +25,16 @@ The client-side cryptographic state of an active Double Ratchet session (root ke
 _Avoid_: Session token, session data, chat state
 
 **Room**:
-A multi-user conversation space secured by a symmetric encryption key derived from the room identifier.
+A multi-user conversation space secured by a symmetric encryption key derived from the room identifier and optional Room Passphrase.
 _Avoid_: Channel, group chat, chatroom
+
+**Room Canary**:
+An encrypted validation token stored with room metadata, used client-side to verify a Room Passphrase without revealing it to the relay server.
+_Avoid_: Password hash, auth token, room signature, verifier
+
+**Room Passphrase**:
+A secret supplied by users and stretched via PBKDF2 with the room identifier to derive a Room's symmetric AES-256-GCM encryption key.
+_Avoid_: Room password, channel secret, room PIN
 
 **Safety Number**:
 The verifiable cryptographic fingerprint derived from both peers' identity public keys, compared out-of-band to detect man-in-the-middle attacks.

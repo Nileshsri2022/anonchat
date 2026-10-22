@@ -1,11 +1,13 @@
 // Room-level encryption utilities for multi-user chatrooms
-// Uses AES-256-GCM for symmetric encryption with shared room keys
+// Uses AES-256-GCM for symmetric encryption with shared room keys and PBKDF2 for passworded rooms
 
 export interface EncryptedMessage {
   ciphertext: string;
   iv: string;
   tag: string;
 }
+
+export const ROOM_CANARY_TOKEN = 'anonchat_canary_v1';
 
 export class RoomEncryption {
   private roomKey: CryptoKey | null = null;
@@ -91,7 +93,7 @@ export class RoomEncryption {
     return decoder.decode(decrypted);
   }
 
-  // Derive room key from room ID and shared secret
+  // Derive room key from room ID and shared secret (SHA-256 legacy / public room)
   async deriveRoomKey(roomId: string, sharedSecret: string): Promise<void> {
     const encoder = new TextEncoder();
     const keyMaterial = encoder.encode(roomId + sharedSecret);
@@ -109,6 +111,63 @@ export class RoomEncryption {
       true,
       ['encrypt', 'decrypt']
     );
+  }
+
+  /**
+   * Derive room key from Room Passphrase using PBKDF2 (100k iterations, SHA-256, salt=roomId).
+   * If passphrase is not provided, falls back to public room derivation ('shared-secret').
+   */
+  async deriveKeyFromPassphrase(roomId: string, passphrase?: string): Promise<void> {
+    if (!passphrase || passphrase.trim() === '') {
+      return this.deriveRoomKey(roomId, 'shared-secret');
+    }
+
+    const encoder = new TextEncoder();
+    const passwordBytes = encoder.encode(passphrase.trim());
+    const saltBytes = encoder.encode(roomId.trim());
+
+    const baseKey = await crypto.subtle.importKey(
+      'raw',
+      passwordBytes,
+      'PBKDF2',
+      false,
+      ['deriveKey']
+    );
+
+    this.roomKey = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: saltBytes,
+        iterations: 100000,
+        hash: 'SHA-256',
+      },
+      baseKey,
+      {
+        name: 'AES-GCM',
+        length: 256,
+      },
+      true,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  /**
+   * Generate an encrypted Room Canary token using the current derived room key
+   */
+  async createCanary(): Promise<EncryptedMessage> {
+    return this.encrypt(ROOM_CANARY_TOKEN);
+  }
+
+  /**
+   * Validate a trial passphrase zero-knowledge by decrypting the Room Canary
+   */
+  async verifyCanary(canary: EncryptedMessage): Promise<boolean> {
+    try {
+      const decrypted = await this.decrypt(canary);
+      return decrypted === ROOM_CANARY_TOKEN;
+    } catch {
+      return false;
+    }
   }
 }
 
