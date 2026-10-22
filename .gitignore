@@ -182,3 +182,4 @@ sessions/
 temp/
 # Local message cache
 cache/
+.claude
