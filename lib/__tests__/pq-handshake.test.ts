@@ -167,6 +167,22 @@ describe('PQ hybrid handshake (ticket 15)', () => {
     await expect(carol.handleInboundEnvelope(mutated)).rejects.toThrow();
   });
 
+  test('S1: initiate() re-verifies the PQ key signature at the point of use', async () => {
+    const vaultA = await IdentityVault.create({ store: new MemoryKVStore(), iterations: ITERS });
+    const vaultB = await IdentityVault.create({ store: new MemoryKVStore(), iterations: ITERS });
+    const bundleB = await exportIdentityBundle(vaultB);
+
+    // Swapped PQ key (valid base64, someone else's key) with B's signature copied —
+    // import-time validation is assumed bypassed; session init must still refuse.
+    const vaultX = await IdentityVault.create({ store: new MemoryKVStore(), iterations: ITERS });
+    const bundleX = await exportIdentityBundle(vaultX);
+    const contactEvil = contactFromBundle('cB', 'bob', bundleB);
+    contactEvil.identity.pqKemPublicB64 = bundleX.pqKemPublicB64;
+
+    const alice = new DirectMessageClient({ selfUserId: 'alice', vault: vaultA });
+    await expect(alice.sessionForContact(contactEvil)).rejects.toThrow(/PQ key signature/);
+  });
+
   test('S3: responder without PQ capability fails closed against a hybrid initiator', async () => {
     const relay = new RelayCore({ sendRatePerSec: 1000, burstSize: 1000 });
     const kvA = new MemoryKVStore();

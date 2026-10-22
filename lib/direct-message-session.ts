@@ -1,6 +1,7 @@
 import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 import { webcrypto } from 'crypto';
 import type { Contact } from './contact-manager';
+import { PQ_SIGNATURE_DOMAIN } from './identity-bundle';
 
 export interface IdentityKeys {
   publicKey: CryptoKey;
@@ -167,11 +168,23 @@ export class DirectMessageSession {
     );
 
     // Hybrid PQ share (ADR-0006): encapsulate against the Contact's ML-KEM key when published.
+    // Defense in depth: re-verify the PQ key's signature at the point of use (the Pre-Key
+    // signature gets the same treatment above), so an unvalidated Contact cannot steer
+    // the PQ share to an attacker's key.
     let pqShared: Uint8Array<ArrayBuffer> | undefined;
     if (recipientContact.identity.pqKemPublicB64) {
-      const encapsulated = ml_kem768.encapsulate(
-        this.b64ToBytes(recipientContact.identity.pqKemPublicB64),
-      );
+      const { pqKemPublicB64, pqKemSignatureB64, identitySigningPublicKey } = recipientContact.identity;
+      if (pqKemSignatureB64 && identitySigningPublicKey) {
+        await this.verifySignatureOver(
+          identitySigningPublicKey,
+          pqKemSignatureB64,
+          new Uint8Array([
+            ...new TextEncoder().encode(PQ_SIGNATURE_DOMAIN),
+            ...this.b64ToBytes(pqKemPublicB64),
+          ]),
+        );
+      }
+      const encapsulated = ml_kem768.encapsulate(this.b64ToBytes(pqKemPublicB64));
       pqShared = this.copyBytes(encapsulated.sharedSecret);
       this.pendingPqCiphertext = this.bytesToB64(encapsulated.cipherText);
     }
@@ -596,6 +609,29 @@ export class DirectMessageSession {
     // Distinct domains keep hybrid roots from ever colliding with classical-only roots.
     const domain = pqShared ? 'anonchat-pqxdh-v1' : 'anonchat-x3dh-v1';
     return this.hkdf(combinedDH.buffer as ArrayBuffer, new Uint8Array(new ArrayBuffer(32)), this.utf8(domain), 256);
+  }
+
+  private async verifySignatureOver(
+    signingPublicSpkiB64: string,
+    signatureB64: string,
+    signedBytes: Uint8Array<ArrayBuffer>,
+  ): Promise<void> {
+    const signingPub = await crypto.subtle.importKey(
+      'spki',
+      this.b64ToBytes(signingPublicSpkiB64),
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['verify'],
+    );
+    const ok = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      signingPub,
+      this.b64ToBytes(signatureB64),
+      signedBytes,
+    );
+    if (!ok) {
+      throw new Error('PQ key signature verification failed for this Contact');
+    }
   }
 
   private b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {

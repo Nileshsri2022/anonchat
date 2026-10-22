@@ -25,6 +25,8 @@ export interface ContactIdentity {
   preKeySignature?: string;
   /** ML-KEM-768 public key (base64) for the hybrid PQ handshake (ADR-0006). */
   pqKemPublicB64?: string;
+  /** ECDSA signature over the PQ key bytes (base64), verified at import AND at use. */
+  pqKemSignatureB64?: string;
 }
 
 export interface Contact {

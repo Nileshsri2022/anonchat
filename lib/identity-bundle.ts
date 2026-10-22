@@ -21,7 +21,7 @@ export interface IdentityBundle {
   createdAt: number;
 }
 
-const PQ_SIGNATURE_DOMAIN = 'anonchat-pqkem-v1|';
+export const PQ_SIGNATURE_DOMAIN = 'anonchat-pqkem-v1|';
 
 function bytesToB64(bytes: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)));
