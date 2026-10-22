@@ -6,7 +6,7 @@ Spec: issue #14. Tickets: #15–#26 (native blocking edges). Process: per-ticket
 | 01 | PQ hybrid handshake | #15 | ✅ implemented | 0 hard · 2 review findings fixed (use-time PQ sig verify; unsigned key fail-closed) | e342af0+ac48fed+9d10888 |
 | 02 | Sealed sender v3 | #16 | ✅ implemented | 0 hard · sealed handshake refined in ADR-0007 (DH1 replaced by in-ciphertext signature); 4 dedicated tests | see git |
 | 03 | Sender-key lib | #17 | ✅ implemented | 0 hard · chain ratchet + skip cache + rotation + pairwise distribution proven over live v3 DM | see git |
-| 04 | Room rewire | #18 | 🔶 in progress — core done (part 1), UI wiring next (part 2) | 0 hard · S3: intro bootstrap → pairwise SKD → authenticated content → no-history watermark → leave rotation; FIXED double-initiate collision (real product bug) | see git |
+| 04 | Room rewire | #18 | ✅ implemented (part 1 core + part 2 UI) | 0 hard · S3 whole story; intros carry full bundles; hook + badge wired; passphrase rooms unchanged | see git |
 | 05 | Relay blob store | #19 | ✅ implemented | 0 hard · result-pattern matched postMessage contract; 6 S2 tests (round-trip, 413, 429, TTL, 404, no-metadata) | see git |
 | 06 | Attachments + voice | #20 | blocked by #16,#19 | | |
 | 07 | Typing + receipts | #21 | blocked by #16 | | |

@@ -3,15 +3,14 @@
 // distributed strictly pairwise over DM ratchets. Late joiners start at the
 // distributor's current chain position (startN) — history stays unreadable.
 import { SenderKeyRatchet, type SenderKeyMessage, createSenderKey } from './sender-key';
+import type { IdentityBundle } from './identity-bundle';
 
-/** What travels INSIDE the Room-Key-encrypted intro (one per member, ever). */
+/** What travels INSIDE the Room-Key-encrypted intro (one per member, ever):
+ *  the full Identity Bundle (so members can open pairwise DM channels for
+ *  Sender-Key distribution) plus the optional self-chosen Display Name. */
 export interface IntroPayload {
   t: 'intro';
-  /** ECDH identity key SPKI (base64). */
-  ik: string;
-  /** Signing key SPKI (base64). */
-  sk: string;
-  /** Optional self-chosen Display Name (ADR glossary). */
+  bundle: IdentityBundle;
   name?: string;
 }
 
@@ -76,6 +75,8 @@ export class RoomSenderKeyCoordinator {
     private readonly selfSasVerified = true,
   ) {}
 
+  private selfBundle: IdentityBundle | undefined;
+
   /** A member joining/creating a room: fresh Sender Key for this room. */
   static async create(
     roomId: string,
@@ -94,27 +95,40 @@ export class RoomSenderKeyCoordinator {
     );
   }
 
+  /** Attach our own Identity Bundle (needed for the intro; ADR-0008). */
+  setSelfBundle(bundle: IdentityBundle): void {
+    this.selfBundle = bundle;
+  }
+
   /** The one Intro Message this member ever posts (Room-Key encrypted by the caller). */
   makeIntroPayload(): IntroPayload {
-    if (this.introSent) {
-      // Re-sending the same intro is harmless; it is idempotent for receivers.
+    if (!this.selfBundle) {
+      throw new Error('Coordinator needs its Identity Bundle before it can intro');
     }
     this.introSent = true;
-    return { t: 'intro', ik: this.selfIdentitySpkiB64, sk: this.selfSigningSpkiB64, name: this.selfDisplayName };
+    return { t: 'intro', bundle: this.selfBundle, name: this.selfDisplayName };
   }
 
   /** Register a member from their decrypted intro. Self-intros are ignored. */
   onIntroPayload(json: string): RoomMemberInfo | null {
     const intro = parse<IntroPayload>(json, 'intro', 'intro');
-    if (intro.ik.trim() === this.selfIdentitySpkiB64.trim()) return null;
+    const ik = intro.bundle.identityPublicKeySpkiB64;
+    if (ik.trim() === this.selfIdentitySpkiB64.trim()) return null;
     const member: RoomMemberInfo = {
-      identitySpkiB64: intro.ik,
-      signingSpkiB64: intro.sk,
+      identitySpkiB64: ik,
+      signingSpkiB64: intro.bundle.identitySigningPublicKeySpkiB64,
       displayName: intro.name,
       sasVerified: false,
     };
-    this.memberRegistry.set(intro.ik, member);
+    this.memberRegistry.set(ik, member);
     return member;
+  }
+
+  /** The Identity Bundle a member's intro carried (for opening the pairwise DM). */
+  introBundleOf(json: string): IdentityBundle | null {
+    const intro = parse<IntroPayload>(json, 'intro', 'intro');
+    if (intro.bundle.identityPublicKeySpkiB64.trim() === this.selfIdentitySpkiB64.trim()) return null;
+    return intro.bundle;
   }
 
   /** The pairwise DM control content announcing our Sender Key to ONE member.
@@ -215,4 +229,15 @@ export class RoomSenderKeyCoordinator {
   get selfVerified(): boolean {
     return this.selfSasVerified;
   }
+}
+
+/** Per-room coordinator registry (module scope — one per joined Room per tab). */
+const coordinators = new Map<string, RoomSenderKeyCoordinator>();
+
+export function registerRoomCoordinator(coordinator: RoomSenderKeyCoordinator): void {
+  coordinators.set(coordinator.roomId, coordinator);
+}
+
+export function roomCoordinator(roomId: string): RoomSenderKeyCoordinator | undefined {
+  return coordinators.get(roomId);
 }

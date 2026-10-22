@@ -7,6 +7,15 @@ import { roomEncryption } from '@/lib/room-encryption';
 import { socketService } from '@/lib/socket-service';
 import type { StoredMessage } from '@/lib/message-storage';
 import { getEncryptedHistoryStorage } from '@/lib/storage-key-instance';
+import {
+  RoomSenderKeyCoordinator,
+  registerRoomCoordinator,
+  roomCoordinator,
+  type IntroPayload,
+} from '@/lib/room-sender-keys';
+import type { IdentityBundle } from '@/lib/identity-bundle';
+import type { Contact } from '@/lib/contact-manager';
+import { getDmClient } from '@/lib/dm-client-instance';
 
 export interface Message {
   id: string;
@@ -17,6 +26,8 @@ export interface Message {
   encrypted: boolean;
   ip?: string; // Anonymous IP from SOCKS proxy
   expiresAt?: number; // For disappearing messages
+  /** Sender-key rooms: the sender's pairwise SAS state (Unverified Badge, ADR-0008). */
+  verified?: boolean;
 }
 
 export interface RoomUser {
@@ -41,6 +52,8 @@ const USER_COLORS = [
 
 export function useChatroom(roomId: string, roomName: string, passphrase?: string, roomKeyB64?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const coordinatorRef = useRef<RoomSenderKeyCoordinator | null>(null);
+  const introSentRef = useRef(false);
   const [users, setUsers] = useState<RoomUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Try WebSocket first
@@ -60,8 +73,24 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
         // passphrase Rooms derive from the Room Passphrase.
         if (roomKeyB64) {
           await roomEncryption.importRoomKey(roomKeyB64);
+          // Sender-key room (ADR-0008): the Room Key only carries Intros;
+          // content rides pairwise-distributed Sender-Key chains.
+          const existing = roomCoordinator(roomId);
+          if (!existing) {
+            const client = await getDmClient();
+            const bundle = await client.exportOwnBundle();
+            const coordinator = await RoomSenderKeyCoordinator.create(
+              roomId,
+              bundle.identityPublicKeySpkiB64,
+              bundle.identitySigningPublicKeySpkiB64,
+            );
+            coordinator.setSelfBundle(bundle);
+            registerRoomCoordinator(coordinator);
+          }
+          coordinatorRef.current = roomCoordinator(roomId) ?? null;
         } else {
           await roomEncryption.deriveKeyFromPassphrase(roomId, passphrase ?? '');
+          coordinatorRef.current = null;
         }
 
         // Join room
@@ -171,12 +200,90 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
       // Skip messages from current user
       if (msg.userId === currentUser.id) return;
 
+      const coordinator = coordinatorRef.current;
+
+      // Sender-key room content (ADR-0008): per-sender chain, sender-authenticated
+      if (coordinator && msg.encryptedContent.startsWith('{"t":"msg"')) {
+        try {
+          const { text, from, verified } = await coordinator.decryptContent(msg.encryptedContent);
+          const info = coordinator.memberInfo(from);
+          const username = info?.displayName || `anon-${from.slice(0, 6)}`;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: msg.id,
+              userId: from,
+              username,
+              content: text,
+              timestamp: new Date(msg.timestamp),
+              encrypted: true,
+              expiresAt: msg.expiresAt,
+              verified,
+            },
+          ]);
+        } catch (e) {
+          console.warn('[room] sender-chain message skipped:', (e as Error).message);
+        }
+        return;
+      }
+
       try {
         const decrypted = await roomEncryption.decrypt({
           ciphertext: msg.encryptedContent,
           iv: msg.iv,
           tag: '',
         });
+
+        // Room-Key-encrypted Intro (one per member): register + open the pairwise
+        // DM + distribute our Sender Key. Intros are never chat content.
+        if (coordinator && decrypted.startsWith('{"t":"intro"')) {
+          try {
+            const intro = JSON.parse(decrypted) as IntroPayload;
+            coordinator.onIntroPayload(decrypted);
+            const bundle: IdentityBundle | null = coordinator.introBundleOf(decrypted);
+            if (bundle) {
+              const client = await getDmClient();
+              const contact: Contact = {
+                id: `roomintro_${intro.bundle.identityPublicKeySpkiB64.slice(0, 12)}`,
+                alias: intro.name || `anon-${intro.bundle.identityPublicKeySpkiB64.slice(0, 6)}`,
+                identity: {
+                  id: `roomintro_user_${intro.bundle.identityPublicKeySpkiB64.slice(0, 8)}`,
+                  identityPublicKey: bundle.identityPublicKeySpkiB64,
+                  preKeyPublic: bundle.preKeyPublicSpkiB64,
+                  preKeyId: bundle.preKeyId,
+                  fingerprint: bundle.identityPublicKeySpkiB64.slice(0, 16),
+                  identitySigningPublicKey: bundle.identitySigningPublicKeySpkiB64,
+                  preKeySignature: bundle.preKeySignatureB64,
+                  pqKemPublicB64: bundle.pqKemPublicB64,
+                  pqKemSignatureB64: bundle.pqKemSignatureB64,
+                },
+                verified: false,
+                verificationCode: '',
+                addedAt: new Date(),
+                encryptionStatus: 'established',
+              };
+              await client.channelForIntro(contact);
+              const dist = await coordinator.distributionFor(bundle.identityPublicKeySpkiB64);
+              await client.sendToContact(contact, dist);
+              if (!introSentRef.current) {
+                introSentRef.current = true;
+                const myIntro = await roomEncryption.encrypt(JSON.stringify(coordinator.makeIntroPayload()));
+                await relayAPI.sendMessage({
+                  id: `intro_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                  roomId,
+                  userId: currentUser.id,
+                  username: currentUser.username,
+                  encryptedContent: myIntro.ciphertext,
+                  iv: myIntro.iv,
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('[room] intro handling skipped:', (e as Error).message);
+          }
+          return;
+        }
 
         // Add user if not exists
         setUsers(prev => {

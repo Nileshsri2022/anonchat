@@ -39,8 +39,16 @@ export function MessageBubble({
         >
           <p className="break-words leading-relaxed">{content}</p>
           <div className="flex items-center justify-between gap-2 mt-1">
-            <span className={`text-xs ${isUser ? 'opacity-70' : 'text-muted-foreground'}`}>
+            <span className={`text-xs ${isUser ? 'opacity-70' : 'text-muted-foreground'} flex items-center gap-1`}>
               {timeString}
+              {verified === false && (
+                <span
+                  className="inline-flex items-center gap-0.5 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-500"
+                  title="Sender not yet SAS-verified"
+                >
+                  unverified
+                </span>
+              )}
             </span>
             {encrypted && (
               <Lock className={`w-3 h-3 ${isUser ? 'opacity-70' : 'opacity-50'}`} />

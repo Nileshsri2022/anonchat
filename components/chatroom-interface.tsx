@@ -136,8 +136,16 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
               )}
               <div className={`flex flex-col gap-1 max-w-md ${isCurrentUser ? 'items-end' : ''}`}>
                 {!isCurrentUser && (
-                  <span className={`text-xs font-semibold ${userColor}`}>
+                  <span className={`text-xs font-semibold ${userColor} flex items-center gap-1`}>
                     {msg.username}
+                    {msg.verified === false && (
+                      <span
+                        className="rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-500"
+                        title="Sender not yet SAS-verified"
+                      >
+                        unverified
+                      </span>
+                    )}
                   </span>
                 )}
                 <div

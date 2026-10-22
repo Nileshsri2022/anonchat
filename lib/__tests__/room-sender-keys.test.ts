@@ -30,6 +30,7 @@ async function makeStack(name: string, displayName?: string) {
     signingSpkiB64,
     displayName,
   );
+  coordinator.setSelfBundle(bundle);
   return { name, bundle, client, coordinator, inbox: await import('../dm-service').then((m) => m.deriveInboxRoomId(bundle.identityPublicKeySpkiB64)) };
 }
 
@@ -115,6 +116,9 @@ describe('Room rewire — sender-key groups (ticket 18)', () => {
         const introPlain = JSON.stringify(peer.coordinator.makeIntroPayload());
         const info = stack.coordinator.onIntroPayload(introPlain);
         expect(info).not.toBeNull();
+        // the intro bundle suffices to open the pairwise DM (contactFromBundle parity)
+        const carried = stack.coordinator.introBundleOf(introPlain);
+        expect(carried?.identityPublicKeySpkiB64).toBe(peer.bundle.identityPublicKeySpkiB64);
         // distribute our sender key to this member over their pairwise DM
         const dist = await stack.coordinator.distributionFor(info!.identitySpkiB64);
         await control(stack, peer)(dist);

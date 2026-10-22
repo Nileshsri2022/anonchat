@@ -10,6 +10,7 @@ import {
   type DecryptedMessage,
 } from './direct-message-session';
 import type { IdentityVault } from './identity-vault';
+import { exportIdentityBundle } from './identity-bundle';
 import type { Contact } from './contact-manager';
 
 export type Transport = (roomId: string, envelope: MessageEnvelope) => Promise<void> | void;
@@ -176,6 +177,19 @@ export class DirectMessageClient {
     }
     this.messagesLog.push(decrypted);
     return decrypted;
+  }
+
+  /** Our own Identity Bundle (v2 when the vault carries PQ keys) for Room Intros. */
+  async exportOwnBundle(): Promise<ReturnType<typeof exportIdentityBundle>> {
+    return exportIdentityBundle(this.vault);
+  }
+
+  /** Open (or reuse) the DM session toward a Contact reached via a Room Intro. */
+  async channelForIntro(contact: Contact): Promise<string> {
+    const session = await this.sessionForContact(contact);
+    const channelId = session.getChannelId();
+    if (!channelId) throw new Error('Intro channel setup failed');
+    return channelId;
   }
 
   /** Pairwise Channels this client has sessions on. */
