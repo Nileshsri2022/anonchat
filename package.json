@@ -22,7 +22,8 @@
     "build:win": "bun run build:next && electron-builder --win",
     "build:mac": "bun run build:next && electron-builder --mac",
     "build:linux": "bun run build:next && electron-builder --linux",
-    "dist": "bun run build:electron"
+    "dist": "bun run build:electron",
+    "deadcode": "bun tools/find-dead.ts --check"
   },
   "build": {
     "appId": "com.anonchat.app",

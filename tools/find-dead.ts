@@ -146,6 +146,19 @@ function main() {
     deadDependencies: deadDeps,
   };
 
+  if (process.argv.includes('--check')) {
+    // CI gate mode (ticket 42 / ADR-0012): fail when anything provably dead
+    // re-enters the tree. The baseline is zero dead files, zero dead deps.
+    const dead = report.deadFiles.length + report.deadDependencies.length;
+    if (dead > 0) {
+      console.log(JSON.stringify(report, null, 2));
+      console.error(`\nDEAD-CODE GATE FAILED: ${report.deadFiles.length} dead file(s), ${report.deadDependencies.length} dead dependency(ies).`);
+      process.exit(1);
+    }
+    console.log(`Dead-code gate: clean — ${report.totalFiles} files reachable, 0 dead files, 0 dead deps.`);
+    process.exit(0);
+  }
+
   if (process.argv.includes('--json')) {
     console.log(JSON.stringify(report, null, 2));
   } else {

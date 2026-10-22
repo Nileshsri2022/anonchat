@@ -1,6 +1,7 @@
-# CI quality gates (ADR-0012, cleanup ticket 32): every PR is mechanically
-# checked — tests, typecheck, offline production build, ESLint. The dead-code
-# detector lands as an additional gate once its backlog is deleted (ticket 42).
+# CI quality gates (ADR-0012, cleanup tickets 32 + 42): every PR is
+# mechanically checked — tests, typecheck, offline production build, ESLint,
+# and the dead-code detector as a hard gate (zero tolerance: the deletion
+# backlog from tickets 33-35 must never regrow).
 name: CI
 
 on:
@@ -34,6 +35,9 @@ jobs:
 
       - name: Lint
         run: bun run lint
+
+      - name: Dead-code gate (import-graph detector)
+        run: bun tools/find-dead.ts --check
 
       - name: Production build (offline)
         run: bun run build
