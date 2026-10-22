@@ -267,7 +267,7 @@ describe('DirectMessageSession - Ticket 03: Protocol Hardening', () => {
       verificationCode: '',
       addedAt: new Date(),
       encryptionStatus: 'pending',
-    }) as any;
+    }) as Contact;
 
     // Valid signature → accepted (session established)
     const ok = new DirectMessageSession({ selfUserId: 'alice', selfIdentityKeys: aliceKeys, selfSigningKeys: await makeSigningKeys() });

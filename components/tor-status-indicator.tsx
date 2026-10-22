@@ -17,7 +17,7 @@ export function TorStatusIndicator() {
     const [isElectron, setIsElectron] = useState(false);
 
     useEffect(() => {
-        const checkElectron = typeof window !== 'undefined' && !!(window as any).TorAPI;
+        const checkElectron = typeof window !== 'undefined' && !!window.TorAPI;
         setIsElectron(checkElectron);
 
         if (checkElectron) {
@@ -33,7 +33,11 @@ export function TorStatusIndicator() {
 
     const checkTorStatus = async () => {
         try {
-            const circuit = await (window as any).TorAPI.getTorCircuit();
+            if (!window.TorAPI) {
+                setStatus('disconnected');
+                return;
+            }
+            const circuit = await window.TorAPI.getTorCircuit();
             if (circuit && circuit.hops.exit) {
                 setStatus('connected');
                 setExitIP(circuit.hops.exit.ip || 'Unknown');

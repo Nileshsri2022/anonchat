@@ -32,8 +32,6 @@ export function ContactList({ onStartChat }: ContactListProps) {
 
   const refreshContacts = () => {
     const allContacts = contactManager.getAllContacts();
-    console.log('🔄 Refreshing contacts, total count:', allContacts.length);
-    console.log('🔄 Contact IDs:', allContacts.map(c => c.id));
     setContacts([...allContacts]);
   };
 
@@ -41,29 +39,23 @@ export function ContactList({ onStartChat }: ContactListProps) {
     refreshContacts();
   }, []);
 
-  const handleAddContact = (contactData: any) => {
+  const handleAddContact = (contactData: Contact) => {
     // This would be called from QR modal
     refreshContacts();
   };
 
   const handleVerifyContact = (contactId: string, code: string) => {
-    console.log('🔐 Attempting to verify contact:', contactId, 'with code:', code);
 
     const contact = contactManager.getContact(contactId);
-    console.log('👤 Contact data:', contact);
 
     if (contact) {
-      console.log('📋 Contact verification code:', contact.verificationCode);
     }
 
     const success = contactManager.verifyContact(contactId, code);
-    console.log('✅ Verification result:', success);
 
     if (success) {
-      console.log('🔄 Refreshing contacts after successful verification');
       refreshContacts();
     } else {
-      console.log('❌ Verification failed');
     }
     return success;
   };

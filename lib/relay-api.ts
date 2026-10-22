@@ -32,6 +32,14 @@ export interface JoinRoomResult {
   name?: string;
 }
 
+export interface RoomRecord {
+  id: string;
+  name?: string;
+  userCount?: number;
+  createdAt?: string;
+  isProtected?: boolean;
+}
+
 class RelayAPI {
   private baseUrl: string = '/api/relay';
   private pollingInterval: number = 2000;
@@ -42,7 +50,7 @@ class RelayAPI {
     name?: string;
     isProtected?: boolean;
     canary?: EncryptedMessage;
-  }): Promise<{ roomId: string; room: any }> {
+  }): Promise<{ roomId: string; room: RoomRecord }> {
     const url = `${this.baseUrl}/rooms`;
 
     const response = await fetch(url, {
@@ -58,7 +66,7 @@ class RelayAPI {
     return response.json();
   }
 
-  async listRooms(): Promise<any[]> {
+  async listRooms(): Promise<RoomRecord[]> {
     const url = `${this.baseUrl}/rooms`;
     try {
       const response = await fetch(url);

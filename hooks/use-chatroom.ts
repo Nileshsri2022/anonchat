@@ -127,7 +127,6 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
             ? ((await historyStore.getMessagesByRoom(roomId)) as StoredMessage[])
             : [];
           if (storedMessages.length > 0) {
-            console.log(`📦 Loaded ${storedMessages.length} messages from IndexedDB`);
             const loadedMessages: Message[] = storedMessages.map(m => ({
               id: m.id,
               userId: m.userId,
@@ -175,7 +174,6 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.expiresAt || msg.expiresAt > now);
         if (filtered.length !== prev.length) {
-          console.log(`🗑️ Cleaned ${prev.length - filtered.length} expired message(s) from UI`);
         }
         return filtered.length !== prev.length ? filtered : prev;
       });
@@ -185,7 +183,6 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
         const store = await getEncryptedHistoryStorage();
         const deleted = store ? await store.purgeExpired(roomId) : 0;
         if (deleted > 0) {
-          console.log(`🗑️ Purged ${deleted} expired message(s) from local storage`);
         }
       } catch {
         // Ignore errors
@@ -346,7 +343,6 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
     if (useWebSocket) {
       socketService.connect()
         .then(() => {
-          console.log('🔌 Using WebSocket for real-time updates');
           socketService.joinRoom(roomId, currentUser.id, currentUser.username);
           socketService.onMessage(roomId, handleNewMessage);
         })
@@ -360,7 +356,6 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
       };
     } else {
       // Fallback to polling
-      console.log('📡 Using polling for real-time updates');
       relayAPI.startPolling(roomId, handleNewMessages, lastMessageIdRef.current);
 
       return () => {

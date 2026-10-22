@@ -47,12 +47,10 @@ app.prepare().then(() => {
     global.io = io;
 
     io.on('connection', (socket) => {
-        console.log(`🔌 Client connected: ${socket.id}`);
 
         // Join a chat room
         socket.on('join-room', (roomId, userId, username) => {
             socket.join(roomId);
-            console.log(`👤 ${username} joined room ${roomId.slice(0, 8)}`);
 
             socket.to(roomId).emit('user-joined', {
                 userId,
@@ -64,7 +62,6 @@ app.prepare().then(() => {
         // Leave a chat room
         socket.on('leave-room', (roomId, userId) => {
             socket.leave(roomId);
-            console.log(`👤 User left room ${roomId.slice(0, 8)}`);
 
             socket.to(roomId).emit('user-left', {
                 userId,
@@ -74,17 +71,12 @@ app.prepare().then(() => {
 
         // New message - broadcast to room
         socket.on('new-message', (roomId, message) => {
-            console.log(`💬 Broadcasting to room ${roomId.slice(0, 8)}`);
             socket.to(roomId).emit('message', message);
         });
 
-        socket.on('disconnect', () => {
-            console.log(`🔌 Client disconnected: ${socket.id}`);
-        });
     });
 
     server.listen(port, hostname, () => {
-        console.log(`> Ready on http://${hostname}:${port}`);
-        console.log(`> Socket.IO ready`);
+        console.log('> AnonChat relay ready on', `http://${hostname}:${port}`);
     });
 });

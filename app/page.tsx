@@ -58,7 +58,7 @@ export default function Home() {
   useEffect(() => {
     // Identity Vault: load the persisted identity (or create one on first launch).
     import('@/lib/vault-instance').then(({ getOrCreateVault }) => getOrCreateVault())
-      .then((vault) => console.log('🔐 Identity Vault ready (sealed:', vault.isSealed(), ')'))
+      .then(() => { /* vault ready */ })
       .catch((e) => console.error('Identity Vault failed to load:', e));
 
     const hasSeenOnboarding = localStorage.getItem('anonchat_onboarding_complete');

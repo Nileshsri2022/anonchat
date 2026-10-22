@@ -80,7 +80,7 @@ export function TorCircuitDisplay() {
 
     useEffect(() => {
         // Check if running in Electron
-        setIsElectron(typeof window !== 'undefined' && !!(window as any).TorAPI);
+        setIsElectron(typeof window !== 'undefined' && !!window.TorAPI);
 
         // Fetch initial circuit info
         fetchCircuitInfo();
@@ -94,9 +94,9 @@ export function TorCircuitDisplay() {
         try {
             setError(null);
 
-            if (typeof window !== 'undefined' && (window as any).TorAPI) {
+            if (typeof window !== 'undefined' && window.TorAPI) {
                 // Electron: Get circuit info from Tor control port
-                const circuitData = await (window as any).TorAPI.getTorCircuit();
+                const circuitData = await window.TorAPI.getTorCircuit();
 
                 if (circuitData) {
                     setCircuit(circuitData);
@@ -144,8 +144,8 @@ export function TorCircuitDisplay() {
     const newCircuit = async () => {
         setLoading(true);
         try {
-            if (typeof window !== 'undefined' && (window as any).TorAPI) {
-                const success = await (window as any).TorAPI.newTorCircuit();
+            if (typeof window !== 'undefined' && window.TorAPI) {
+                const success = await window.TorAPI.newTorCircuit();
 
                 if (success) {
                     // Wait for new circuit to establish

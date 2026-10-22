@@ -1,3 +1,35 @@
+// Shared Electron Tor-API contract (preload contextBridge surface).
+// The typed alternative to `(window as any)` — see ticket 39 (ADR-0012).
+export interface TorHop {
+  nickname: string;
+  ip?: string;
+  country?: string;
+}
+
+export interface TorCircuitInfo {
+  circuitId: string;
+  hops: {
+    guard: TorHop | null;
+    middle: TorHop | null;
+    exit: TorHop | null;
+  };
+}
+
+export interface TorAPI {
+  /** Fetch a URL through the Tor SOCKS proxy; resolves with the response body text. */
+  fetch(url: string): Promise<string>;
+  /** Current circuit (guard -> middle -> exit) or null when Tor is down. */
+  getTorCircuit(): Promise<TorCircuitInfo | null>;
+  /** Request a fresh circuit (NEWNYM); resolves with success. */
+  newTorCircuit(): Promise<boolean>;
+}
+
+declare global {
+  interface Window {
+    TorAPI?: TorAPI;
+  }
+}
+
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import { Socket } from 'net';
 export interface TorStatus {
@@ -72,7 +104,6 @@ export class TorIntegration {
       this.controlSocket.connect(this.torControlPort, '127.0.0.1');
 
       this.controlSocket.on('connect', () => {
-        console.log('Connected to Tor control port');
         resolve(true);
       });
 
@@ -236,7 +267,6 @@ export class TorIntegration {
       }
 
       await this.sendTorCommand('SIGNAL NEWNYM');
-      console.log('Requested new Tor circuit');
 
       // Wait for circuit to establish
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -258,7 +288,6 @@ export class TorIntegration {
 
       const connected = await this.connectTorControl();
       if (!connected) {
-        console.log('❌ Tor control port not accessible');
         return null;
       }
 
@@ -268,16 +297,11 @@ export class TorIntegration {
       const activeCircuit = circuits.find(c => c.status === 'BUILT');
 
       if (activeCircuit) {
-        console.log('🌐 Tor Circuit Active - ID:', activeCircuit.id);
-        console.log('🔄 Tor circuits established - traffic is anonymized');
 
         // Since we can't fetch through SOCKS in browser, show circuit info
-        console.log('📍 To verify your Tor IP, visit: https://check.torproject.org/');
-        console.log('📍 Or use: https://www.whatismyipaddress.com/ through Tor Browser');
 
         return activeCircuit.id; // Return circuit ID as confirmation
       } else {
-        console.log('⚠️ Tor connected but no active circuits');
         return null;
       }
     } catch (error) {
@@ -288,55 +312,29 @@ export class TorIntegration {
 
   async logTorIPStatus(): Promise<void> {
     try {
-      console.log('🔍 Checking Tor connectivity and circuit status...');
 
       const status = await this.checkTorStatus();
-      console.log('🔍 Tor Status:', status);
 
       if (status.connected && status.circuitEstablished) {
-        console.log('✅ Tor daemon connected and circuit established');
 
         const circuitInfo = await this.getCurrentIP();
         if (circuitInfo) {
-          console.log('✅ CONFIRMED: Tor circuits active - traffic is anonymized');
-          console.log('🔄 Active Circuit ID:', circuitInfo);
-          console.log('🌐 Your traffic is routed through Tor exit nodes');
-          console.log('');
-          console.log('📋 To verify your Tor exit IP:');
-          console.log('   1. Open Tor Browser');
-          console.log('   2. Visit: https://check.torproject.org/');
-          console.log('   3. Or visit: https://www.whatismyipaddress.com/');
-          console.log('   4. Your IP should be different from your regular IP');
         } else {
-          console.log('⚠️ Tor connected but circuit verification failed');
         }
       } else {
-        console.log('❌ Tor not fully connected');
         if (!status.connected) {
-          console.log('   - Tor daemon not accessible on control port 9051');
         }
         if (!status.circuitEstablished) {
-          console.log('   - No active Tor circuits established');
         }
       }
 
-      console.log('');
-      console.log('🔧 Troubleshooting:');
-      console.log('   - Ensure Tor daemon is running');
-      console.log('   - Check ports 9051 (control) and 9050 (SOCKS) are open');
-      console.log('   - Verify no firewall blocking localhost connections');
 
     } catch (error) {
       console.error('❌ Tor status check failed:', error);
-      console.log('');
-      console.log('🔧 Possible issues:');
-      console.log('   - Tor daemon not installed or not running');
-      console.log('   - Control port 9051 not accessible');
-      console.log('   - Firewall blocking local connections');
     }
   }
 
-  async fetchThroughTor(url: string, options: RequestInit = {}): Promise<any> {
+  async fetchThroughTor(url: string, options: RequestInit = {}): Promise<Response> {
     if (!this.proxyAgent) {
       throw new Error('Tor proxy agent not initialized');
     }
@@ -417,18 +415,14 @@ export class TorIntegration {
       );
 
       if (!active) {
-        console.log('No active BUILT circuits found');
         return null;
       }
 
-      console.log(`🎯 Selected circuit ${active.id} with ${active.path.length} hops`);
-      console.log(`   Fingerprints:`, active.path);
 
       // Resolve node info for each hop SEQUENTIALLY to avoid socket buffer issues
       const nodes: CircuitHop[] = [];
       for (let i = 0; i < active.path.length; i++) {
         const fp = active.path[i];
-        console.log(`   Fetching info for hop ${i + 1}: ${fp}`);
 
         const nodeInfo = await this.getNodeInfo(fp);
         nodes.push(nodeInfo);
@@ -439,7 +433,6 @@ export class TorIntegration {
         }
       }
 
-      console.log(`✅ Resolved ${nodes.length} nodes:`, nodes);
 
       const circuitInfo = {
         circuitId: active.id,
@@ -450,7 +443,6 @@ export class TorIntegration {
         }
       };
 
-      console.log(`📊 Final circuit info:`, circuitInfo);
 
       return circuitInfo;
     } catch (error) {
@@ -465,7 +457,6 @@ export class TorIntegration {
   private parseCircuits(response: string): Circuit[] {
     const circuits: Circuit[] = [];
 
-    console.log('📋 Raw circuit response:', response);
 
     response.split('\r\n').forEach(line => {
       if (!line || line.startsWith('250')) return;
@@ -478,7 +469,6 @@ export class TorIntegration {
       const path = parts[2];
       const metadata = parts.slice(3).join(' ');
 
-      console.log(`🔍 Parsing circuit ${id}: status=${status}, path=${path}`);
 
       if (status !== 'BUILT') return;
 
@@ -488,14 +478,12 @@ export class TorIntegration {
         .map(n => {
           const match = n.match(/\$([A-F0-9]+)/);
           if (match) {
-            console.log(`  ✓ Extracted fingerprint: ${match[1]}`);
             return match[1];
           }
           return null;
         })
         .filter(Boolean) as string[];
 
-      console.log(`  📊 Total fingerprints extracted: ${fingerprints.length}`, fingerprints);
 
       if (fingerprints.length >= 3) {
         circuits.push({
@@ -509,7 +497,6 @@ export class TorIntegration {
       }
     });
 
-    console.log(`✅ Parsed ${circuits.length} BUILT circuits`);
     return circuits;
   }
 
@@ -518,9 +505,7 @@ export class TorIntegration {
    */
   private async getNodeInfo(fingerprint: string): Promise<CircuitHop> {
     try {
-      console.log(`      🔍 Querying Tor for fingerprint: ${fingerprint}`);
       const response = await this.sendTorCommand(`GETINFO ns/id/${fingerprint}`);
-      console.log(`      📄 Tor response for ${fingerprint.substring(0, 8)}:`, response.substring(0, 200));
 
       // Parse node descriptor (format: "r nickname identity published IP ORPort DirPort")
       const line = response
@@ -532,39 +517,30 @@ export class TorIntegration {
         return { nickname: 'Unknown' };
       }
 
-      console.log(`      📋 Parsing line: ${line}`);
       const parts = line.split(' ');
       const nickname = parts[1];
       const ip = parts[6];
 
-      console.log(`      ✅ Extracted: nickname=${nickname}, ip=${ip}`);
 
       let country: string | undefined;
 
       // Get country code via GeoIP (only if IP is valid)
       if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
         try {
-          console.log(`      🌍 Querying Tor GeoIP for ${ip}...`);
           const geo = await this.sendTorCommand(`GETINFO ip-to-country/${ip}`);
-          console.log(`      📄 Tor GeoIP response: ${geo}`);
 
           const match = geo.match(/ip-to-country\/[\d.]+=(..)/i);
           if (match && match[1] !== '??') {
             country = match[1].toUpperCase();
-            console.log(`      ✅ Country resolved from Tor: ${country}`);
           } else {
-            console.log(`      ⚠️ Tor GeoIP unavailable, trying fallback API...`);
             // Fallback: Use external GeoIP API
             country = await this.getCountryFromAPI(ip);
           }
-        } catch (error: any) {
-          console.log(`      ❌ Tor GeoIP query failed: ${error.message}`);
-          console.log(`      🔄 Trying fallback GeoIP API...`);
+        } catch {
           // Fallback: Use external GeoIP API
           country = await this.getCountryFromAPI(ip);
         }
       } else {
-        console.log(`      ⚠️ Invalid IP format: ${ip}`);
       }
 
       return { nickname, ip, country };
@@ -603,7 +579,6 @@ export class TorIntegration {
       }
 
       await this.sendTorCommand('SIGNAL NEWNYM');
-      console.log('✅ Requested new Tor circuit (NEWNYM)');
 
       // Wait for circuit to establish
       await new Promise(resolve => setTimeout(resolve, 3000));

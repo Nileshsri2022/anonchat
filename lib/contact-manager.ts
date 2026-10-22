@@ -47,7 +47,6 @@ export class ContactManager {
   private verificationPending: Map<string, string> = new Map();
 
   addContact(alias: string, identity: ContactIdentity): Contact {
-    console.log('➕ Adding new contact:', alias, 'with ID pattern:', identity.id);
 
     const contact: Contact = {
       id: `contact_${Date.now()}`,
@@ -59,7 +58,6 @@ export class ContactManager {
       encryptionStatus: 'pending',
     };
 
-    console.log('📝 Created contact with ID:', contact.id);
 
     this.contacts.set(contact.id, contact);
     return contact;
