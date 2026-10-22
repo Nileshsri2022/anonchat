@@ -182,4 +182,4 @@ sessions/
 temp/
 # Local message cache
 cache/
-.claude
+.claudepackage-lock.json
