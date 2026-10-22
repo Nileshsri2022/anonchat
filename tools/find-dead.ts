@@ -28,7 +28,7 @@ const TOOLING_DEPS = new Set([
   '@eslint/eslintrc', 'tw-animate-css', 'react-dom', 'react',
 ]);
 
-function walk(dir, out: string[] = []): string[] {
+function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     if (name === 'node_modules' || name === '.next' || name === '.git' || name.startsWith('.')) continue;
     const p = join(dir, name);
