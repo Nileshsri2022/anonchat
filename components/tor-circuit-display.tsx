@@ -170,7 +170,7 @@ export function TorCircuitDisplay() {
         >
             <Shield className="w-4 h-4 text-primary" />
             <span className="font-medium">Tor Circuit</span>
-            <Lock className="w-3 h-3 text-green-500" />
+            <Lock className="w-3 h-3 text-success" />
             <span className="font-mono text-xs text-muted-foreground">{exitIP}</span>
         </button>
     );

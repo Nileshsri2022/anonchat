@@ -63,7 +63,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
               <h2 className="font-semibold text-foreground">{roomName}</h2>
               {isProtected && (
                 <span title="Room Passphrase Protected">
-                  <Lock className="w-3.5 h-3.5 text-yellow-500" />
+                  <Lock className="w-3.5 h-3.5 text-warning" />
                 </span>
               )}
             </div>
@@ -80,7 +80,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
               {!isConnected && (
                 <>
                   <span>•</span>
-                  <span className="text-yellow-500">Connecting...</span>
+                  <span className="text-warning">Connecting...</span>
                 </>
               )}
             </div>
@@ -141,7 +141,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
                     {msg.username}
                     {msg.verified === false && (
                       <span
-                        className="rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-500"
+                        className="rounded bg-warning/15 px-1 text-[10px] font-medium text-warning"
                         title="Sender not yet SAS-verified"
                       >
                         unverified

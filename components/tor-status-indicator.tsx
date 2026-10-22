@@ -68,8 +68,8 @@ export function TorStatusIndicator() {
 
     const getStatusColor = () => {
         switch (status) {
-            case 'connected': return 'text-green-500';
-            case 'connecting': return 'text-yellow-500';
+            case 'connected': return 'text-success';
+            case 'connecting': return 'text-warning';
             case 'disconnected': return 'text-red-500';
         }
     };

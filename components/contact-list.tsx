@@ -105,9 +105,9 @@ export function ContactList({ onStartChat }: ContactListProps) {
 
   return (
     <>
-      <div className="w-80 border-r border-border bg-muted/20 flex flex-col h-screen">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Header */}
-        <div className="p-4 border-b border-border">
+        <div className="pl-4 pr-12 pt-4 pb-3 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-lg text-foreground">Contacts</h2>
           </div>

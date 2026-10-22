@@ -48,9 +48,9 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
   const CurrentIcon = steps[step].icon;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-card flex items-center justify-center p-4">
+    <div className="min-h-dvh bg-gradient-to-br from-background via-background to-card flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl bg-card/50 backdrop-blur border-border">
-        <div className="p-12 text-center">
+        <div className="p-6 sm:p-12 text-center">
           <div className="flex justify-center mb-8">
             <div className="bg-primary/10 p-6 rounded-xl">
               <CurrentIcon className="w-12 h-12 text-primary" />
