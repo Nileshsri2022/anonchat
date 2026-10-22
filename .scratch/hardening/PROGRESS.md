@@ -14,7 +14,7 @@ so per-ticket status lives here until it can be mirrored into the final PR.
 | 06 Encrypted history | #8 | ✅ implemented | Standards 0 hard · Spec 4/4 ACs | 174233f |
 | 07 Relay hardening | #9 | ✅ implemented | Standards 0 hard · Spec 8/8 ACs | see git |
 | 08 Privacy/build | #10 | ✅ implemented | offline build green, headers added | see git |
-| 09 Verification UX + consolidation | #11 | in progress | | |
-| 10 Full-flow E2E | #12 | blocked by #3–#11 | | |
+| 09 Verification UX + consolidation | #11 | ✅ implemented | Standards 0 hard · Spec 5/5 ACs (SAS = key-derived, timing-safe verify; 6 dead modules deleted) | eef3a91 |
+| 10 Full-flow E2E | #12 | ✅ implemented | S3 golden seam green: 3 stacks / 1 relay, whole story in 1 test (20 asserts); dup delivery + self-echo made idempotent; broken dead kdfChain removed (finding 4 closed) | 970f2e0 |
 
 Test seams (agreed): S1 lib module interfaces · S2 relay HTTP · S3 two-client E2E.
