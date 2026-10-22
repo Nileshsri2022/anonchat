@@ -1,0 +1,26 @@
+{
+  "name": "AnonChat — Private Encrypted Messaging",
+  "short_name": "AnonChat",
+  "description": "Anonymous, end-to-end encrypted messaging. No accounts, no phone numbers, no metadata.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "categories": ["social", "communication"],
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
