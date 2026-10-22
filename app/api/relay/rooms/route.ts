@@ -1,7 +1,8 @@
 // API route for creating and listing anonymous chat rooms
 import { NextRequest, NextResponse } from 'next/server';
-import { getTorIP, generateAnonymousId } from '@/lib/tor-integration';
+import { generateAnonymousId } from '@/lib/tor-integration';
 import { roomRegistry } from '@/lib/room-registry';
+import { relayCore } from '@/lib/relay-core-instance';
 
 export async function GET() {
   try {
@@ -14,7 +15,6 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const anonIP = await getTorIP();
     const body = await request.json().catch(() => ({}));
 
     const roomId = body.id || generateAnonymousId();
@@ -25,13 +25,14 @@ export async function POST(request: NextRequest) {
       canary: body.canary,
     });
 
-    console.log(`🏠 [TOR CIRCUIT] Room created: ${room.id.slice(-6)} (Protected: ${room.isProtected}) with rotating IP: ${anonIP}`);
+    // The Room Key never reaches the relay — only opaque metadata + an optional canary
+    relayCore.upsertRoom({ id: room.id, name: room.name, isProtected: room.isProtected, canary: room.canary });
+    console.log('[relay] room created');
 
     return NextResponse.json({
       success: true,
       roomId: room.id,
       room,
-      userIP: anonIP,
       message: 'Room created successfully',
     });
   } catch (error) {

@@ -86,7 +86,7 @@ async function getTorStatus(): Promise<TorStatus> {
                     const circuitMatch = dataBuffer.match(/\d+ BUILT ([^\r\n]+)/);
                     if (circuitMatch) {
                         const hops = circuitMatch[1].split(',');
-                        console.log('[TOR-STATUS] Circuit hops:', hops);
+                        console.log('[TOR-STATUS] circuit hops established (details withheld from logs)');
 
                         // Extract node names
                         const extractNode = (hop: string): CircuitHop => {
@@ -118,7 +118,7 @@ async function getTorStatus(): Promise<TorStatus> {
                     });
                     const ipData = await ipResponse.json();
                     status.exitIp = ipData.ip;
-                    console.log('[TOR-STATUS] Server IP:', status.exitIp);
+                    console.log('[TOR-STATUS] exit node reached (IP withheld from logs)');
                 } catch {
                     console.log('[TOR-STATUS] Could not get exit IP');
                 }
