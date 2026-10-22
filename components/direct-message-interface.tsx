@@ -28,7 +28,7 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, isConnected, sendMessage, isVerified, safetyNumber } = useDirectMessage(contact);
+  const { messages, isConnected, sendMessage, isVerified, safetyNumber, remoteTyping, sendTyping, sendReadReceipt } = useDirectMessage(contact);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -294,7 +294,10 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
 
           <Input
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e) => {
+              setInputText(e.target.value);
+              if (e.target.value) void sendTyping(); // throttled inside the hook
+            }}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder={`Send encrypted message to ${contact.alias}...`}
             className="flex-1 bg-background"
@@ -304,6 +307,9 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
             <Send className="w-4 h-4" />
           </Button>
         </div>
+        {remoteTyping && (
+          <div className="px-2 pb-1 text-xs text-muted-foreground animate-pulse">{contact.alias} is typing…</div>
+        )}
       </div>
 
       {/* Verification Modal */}

@@ -4,11 +4,16 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Contact } from '@/lib/contact-manager';
 import type { DecryptedMessage, MessageEnvelope } from '@/lib/direct-message-session';
 import { getDmClient } from '@/lib/dm-client-instance';
+import { isControlPayload } from '@/lib/control-payloads';
 import type { DirectMessageClient } from '@/lib/dm-service';
 import { socketService } from '@/lib/socket-service';
 import { relayAPI } from '@/lib/relay-api';
 
 interface UseDirectMessageReturn {
+  remoteTyping: boolean;
+  peerReadUpTo: number | null;
+  sendTyping: () => Promise<void>;
+  sendReadReceipt: () => Promise<void>;
   messages: DecryptedMessage[];
   isConnected: boolean;
   sendMessage: (content: string, ttl?: number) => Promise<void>;
@@ -26,6 +31,10 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [safetyNumber, setSafetyNumber] = useState(contact.identity.fingerprint);
   const clientRef = useRef<DirectMessageClient | null>(null);
+  const currentChannelRef = useRef<string | null>(null);
+  const [remoteTyping, setRemoteTyping] = useState(false);
+  const [peerReadUpTo, setPeerReadUpTo] = useState<number | null>(null);
+  const typingSentAtRef = useRef(0);
 
   const [currentUser] = useState(() => ({
     id: typeof window !== 'undefined' ? localStorage.getItem('anonchat_userid') || `user_${Math.random().toString(36).slice(2, 11)}` : 'user_default',
@@ -33,6 +42,15 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
   }));
 
   const appendMessage = useCallback((decrypted: DecryptedMessage) => {
+    // Control payloads (typing/read, ticket 21) drive state, never the transcript
+    if (decrypted.control?.type === 'typing') {
+      setRemoteTyping(true);
+      return;
+    }
+    if (decrypted.control?.type === 'read') {
+      setPeerReadUpTo(decrypted.control.upTo);
+      return;
+    }
     setMessages((prev) => {
       if (prev.some((m) => m.id === decrypted.id)) return prev;
       return [...prev, decrypted];
@@ -56,6 +74,33 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
       // Socket push already covers live recipients; the relay buffer is best-effort
     }
   }, [currentUser.id]);
+
+  /** Throttled typing indicator: at most one per 2.5s while composing (on by default). */
+  const sendTyping = useCallback(async () => {
+    const client = clientRef.current;
+    const channel = currentChannelRef.current;
+    if (!client || !channel) return;
+    const now = Date.now();
+    if (now - typingSentAtRef.current < 2500) return;
+    typingSentAtRef.current = now;
+    try {
+      await client.sendTyping(channel, transport);
+    } catch {
+      // typing is best-effort
+    }
+  }, [transport]);
+
+  /** Emit a read receipt if (and only if) the contact opted in. */
+  const sendReadReceipt = useCallback(async () => {
+    const client = clientRef.current;
+    const channel = currentChannelRef.current;
+    if (!client || !channel) return;
+    try {
+      await client.sendReadReceipt(channel, transport);
+    } catch {
+      // receipts are best-effort
+    }
+  }, [transport]);
 
   /** Handle one inbound raw relay/socket object. */
   const acceptInbound = useCallback(async (raw: unknown) => {
@@ -93,6 +138,7 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
       // Establish (or reuse) the Initiator session toward this Contact
       await client.sessionForContact(contact);
       if (!active) return;
+      currentChannelRef.current = client.channels()[0] ?? null;
       setSafetyNumber(contact.identity.fingerprint);
 
       socketService.connect();
@@ -185,5 +231,9 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
     sendMessage,
     isVerified: Boolean(contact.verified),
     safetyNumber,
+    remoteTyping,
+    peerReadUpTo,
+    sendTyping,
+    sendReadReceipt,
   };
 }

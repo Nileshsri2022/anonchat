@@ -11,6 +11,7 @@ import {
 } from './direct-message-session';
 import type { IdentityVault } from './identity-vault';
 import { exportIdentityBundle } from './identity-bundle';
+import { isControlPayload, parseControlPayload, serializeControlPayload, type ControlPayload } from './control-payloads';
 import type { Contact } from './contact-manager';
 
 export type Transport = (roomId: string, envelope: MessageEnvelope) => Promise<void> | void;
@@ -43,6 +44,10 @@ export class DirectMessageClient {
   private readonly sessions = new Map<string, DirectMessageSession>();
   private readonly remoteIdentityByChannel = new Map<string, string>();
   private readonly messagesLog: DecryptedMessage[] = [];
+  /** Read receipts are OFF by default; opt-in per contact identity (ticket 21). */
+  private readonly readReceiptsEnabled = new Set<string>();
+  /** Highest inbound message number seen per channel (for receipts). */
+  private readonly lastInboundNumber = new Map<string, number>();
 
   constructor(options: DirectMessageClientOptions) {
     this.selfUserId = options.selfUserId;
@@ -175,8 +180,63 @@ export class DirectMessageClient {
     if (remoteIdentity) {
       this.remoteIdentityByChannel.set(decrypted.channelId, remoteIdentity);
     }
+
+    // Control payloads never enter the visible history (ticket 21)
+    if (isControlPayload(decrypted.content)) {
+      const control = parseControlPayload(decrypted.content);
+      const shaped = control.t === 'typing' ? ({ type: 'typing' } as const) : ({ type: 'read', upTo: control.upTo } as const);
+      return { ...decrypted, content: '', control: shaped };
+    }
+
+    this.lastInboundNumber.set(decrypted.channelId, (this.lastInboundNumber.get(decrypted.channelId) ?? -1) + 1);
     this.messagesLog.push(decrypted);
     return decrypted;
+  }
+
+  /** Send a typing indicator on a channel (on by default; throttling is the caller's job). */
+  async sendTyping(
+    channelId: string,
+    transport?: Transport,
+  ): Promise<MessageEnvelope> {
+    return this.sendControl(channelId, { t: 'typing' }, transport);
+  }
+
+  /** Read receipts: opt-in per contact identity; OFF by default (ticket 21). */
+  setReadReceiptsEnabled(contactIdentityPublic: string, enabled: boolean): void {
+    if (enabled) this.readReceiptsEnabled.add(contactIdentityPublic.trim());
+    else this.readReceiptsEnabled.delete(contactIdentityPublic.trim());
+  }
+
+  receiptsEnabledFor(contactIdentityPublic: string): boolean {
+    return this.readReceiptsEnabled.has(contactIdentityPublic.trim());
+  }
+
+  /** Emit a read receipt on a channel IF the remote contact opted in; no-op otherwise. */
+  async sendReadReceipt(channelId: string, transport?: Transport): Promise<boolean> {
+    const remote = this.remoteIdentityByChannel.get(channelId);
+    if (!remote || !this.readReceiptsEnabled.has(remote.trim())) {
+      return false; // receipts off — never emit
+    }
+    const upTo = this.lastInboundNumber.get(channelId) ?? 0;
+    await this.sendControl(channelId, { t: 'read', upTo: Math.max(0, upTo) }, transport);
+    return true;
+  }
+
+  private async sendControl(
+    channelId: string,
+    control: ControlPayload,
+    transport?: Transport,
+  ): Promise<MessageEnvelope> {
+    const session = this.sessions.get(channelId);
+    if (!session) throw new Error(`No session on channel ${channelId}`);
+    const envelope = await session.sendMessage(serializeControlPayload(control));
+    this.rememberSent(envelope);
+    if (transport) {
+      const remote = this.remoteIdentityByChannel.get(channelId);
+      if (remote) await transport(await deriveInboxRoomId(remote), envelope);
+      await transport(channelId, envelope);
+    }
+    return envelope;
   }
 
   /** Our own Identity Bundle (v2 when the vault carries PQ keys) for Room Intros. */

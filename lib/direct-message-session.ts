@@ -47,6 +47,8 @@ export interface DecryptedMessage {
   expiresAt?: number;
   /** Sealed sender: who sent this is a decryption OUTPUT, not a wire field (ADR-0007). */
   senderIdentityPublic?: string;
+  /** Control payload (typing/read) — never rendered as chat content (ticket 21). */
+  control?: { type: 'typing' } | { type: 'read'; upTo: number };
 }
 
 export interface DirectMessageSessionConfig {
