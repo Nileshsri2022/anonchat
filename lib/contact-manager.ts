@@ -27,6 +27,8 @@ export interface ContactIdentity {
   pqKemPublicB64?: string;
   /** ECDSA signature over the PQ key bytes (base64), verified at import AND at use. */
   pqKemSignatureB64?: string;
+  /** Optional signed Display Name — part of the PQ signed material (ticket 22). */
+  displayName?: string;
 }
 
 export interface Contact {

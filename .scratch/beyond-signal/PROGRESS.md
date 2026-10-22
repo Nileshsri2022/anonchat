@@ -14,6 +14,6 @@ Spec: issue #14. Tickets: #15–#26 (native blocking edges). Process: per-ticket
 | 09 | PWA shell | #23 | ✅ implemented | 0 hard · manifest sanity + SW network-only-API asserted by test; badge lifecycle test | see git |
 | 10 | Encrypted outbox | #24 | ✅ implemented | 0 hard · sealed queue (same key scheme as history); flush+retry, in-order; FIXED failed-first-send killing a session (PQ ct lost) | see git |
 | 11 | Arch deepening | #25 | ✅ implemented | 0 hard · TransportAdapter seam (2 adapters, tested once vs RelayCore); redis/better-sqlite3/keytar removed; Tor behind a narrow bridge interface | see git |
-| 12 | Golden E2E | #26 | blocked by #16–#25 | | |
+| 12 | Golden E2E | #26 | ✅ implemented | 41 asserts, one test: PQ→sealed→intro room→blob→outbox→purge→sealed reload; relay audited blind at the end; FIXED name-aware PQ verify at use | see git |
 
-Suite at 01: 57 tests / 221 expects green · tsc clean · offline build green.
+Final: 89 tests / 423 expects green · tsc clean · offline build green. All 12 tickets (#15–#26) closed.

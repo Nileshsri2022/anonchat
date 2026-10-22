@@ -183,7 +183,9 @@ export class DirectMessageSession {
       await this.verifySignatureOver(
         identitySigningPublicKey,
         pqKemSignatureB64,
-        new Uint8Array([...new TextEncoder().encode(pqSignedMaterial(pqKemPublicB64))]),
+        new Uint8Array([
+          ...new TextEncoder().encode(pqSignedMaterial(pqKemPublicB64, recipientContact.identity.displayName)),
+        ]),
       );
       const encapsulated = ml_kem768.encapsulate(this.b64ToBytes(pqKemPublicB64));
       pqShared = this.copyBytes(encapsulated.sharedSecret);
