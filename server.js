@@ -7,7 +7,7 @@ const { Server: SocketIOServer } = require('socket.io');
 const dev = process.env.NODE_ENV !== 'production';
 // In dev mode: always use localhost (Windows sets HOSTNAME to computer name)
 // In production: use HOSTNAME env var or 0.0.0.0 for Docker/Render
-const hostname = dev ? 'localhost' : (process.env.HOSTNAME || '0.0.0.0');
+const hostname = dev ? 'localhost' : '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 
 const app = next({ dev, hostname, port });
@@ -31,8 +31,9 @@ app.prepare().then(() => {
                     const { host } = new URL(origin);
                     const allowed = process.env.ALLOWED_ORIGINS
                         ? process.env.ALLOWED_ORIGINS.split(',')
-                        : null;
-                    if (allowed?.includes(origin)) return cb(null, true);
+                        : [];
+                    if (allowed.includes('*') || allowed.includes(origin)) return cb(null, true);
+                    if (host === 'gupt-wheat.vercel.app' || host.endsWith('.vercel.app')) return cb(null, true);
                     if (host === (process.env.HOSTNAME || '')) return cb(null, true);
                     return cb(null, false);
                 } catch {

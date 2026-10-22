@@ -117,7 +117,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   2. Theme map — Tailwind v4 generates bg-*/text-*/border-*/ring-* from these
+   2. Theme map — Tailwind v4 generates utility classes from these
    ------------------------------------------------------------------------- */
 @theme inline {
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
