@@ -130,7 +130,7 @@ export function TorCircuitDisplay() {
                     } else if (data.connected) {
                         setExitIP(`Bootstrap: ${data.bootstrapProgress}%`);
                     } else {
-                        setExitIP(data.error || 'Tor starting...');
+                        setExitIP('Direct Web (Tor inactive)');
                     }
                 } catch (err) {
                     setExitIP('Tor unavailable');
@@ -181,9 +181,9 @@ export function TorCircuitDisplay() {
             title="Tor circuit details"
             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
         >
-            <span className={`w-2 h-2 rounded-full shrink-0 ${error ? 'bg-warning' : 'bg-success'}`} />
+            <span className={`w-2 h-2 rounded-full shrink-0 ${circuit ? 'bg-success' : 'bg-warning'}`} />
             <span className="truncate">
-                Tor circuit: {hopsLabel || maskIP(exitIP)} {circuitTag}
+                {hopsLabel ? `Tor circuit: ${hopsLabel}` : `Connection: ${maskIP(exitIP)}`} {circuitTag}
             </span>
             <RefreshCw className="w-3 h-3 ml-auto shrink-0" />
         </button>
@@ -203,9 +203,10 @@ export function TorCircuitDisplay() {
                 {error || !circuit ? (
                     <div className="py-4 space-y-3">
                         <p className="text-sm text-muted-foreground text-center">
-                            {error || 'Loading circuit...'}
+                            Standard Web Connection
                         </p>
-                        <p className="text-sm text-center">Exit IP: {maskIP(exitIP)}</p>
+                        <p className="text-xs text-muted-foreground text-center px-2">End-to-end message encryption is active. To route network traffic through Tor circuits, open this URL in Tor Browser or use the Desktop App.</p>
+                        <p className="text-xs text-muted-foreground text-center">Status: {maskIP(exitIP)}</p>
                         <Button
                             onClick={fetchCircuitInfo}
                             className="w-full"
