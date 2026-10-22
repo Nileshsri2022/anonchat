@@ -114,7 +114,11 @@ async function getCircuitInfo() {
     let circuitLine = null;
 
     for (const line of lines) {
-      if (line.includes('BUILT') && !line.includes('HS_SERVICE') && !line.includes('INTRO') && !line.includes('REND')) {
+      if (line.includes('BUILT') && !line.includes('ONEHOP_TUNNEL') && !line.includes('IS_INTERNAL') && !line.includes('HS_SERVICE') && !line.includes('INTRO') && !line.includes('REND')) {
+        const parts = line.split(' ');
+        const pathStr = parts[2] || '';
+        const fps = pathStr.split(',').map(n => { const m = n.match(/\$([A-F0-9]+)/i); return m ? m[1] : null; }).filter(Boolean);
+        if (fps.length < 3) continue;
         circuitLine = line;
         break;
       }
