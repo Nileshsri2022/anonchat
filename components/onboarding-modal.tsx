@@ -48,43 +48,43 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
   const CurrentIcon = steps[step].icon;
 
   return (
-    <div className="min-h-dvh bg-gradient-to-br from-background via-background to-card flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl bg-card/50 backdrop-blur border-border">
-        <div className="p-6 sm:p-12 text-center">
-          <div className="flex justify-center mb-8">
-            <div className="bg-primary/10 p-6 rounded-xl">
-              <CurrentIcon className="w-12 h-12 text-primary" />
+    <div className="min-h-dvh bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-card border-border shadow-sm">
+        <div className="p-6 sm:p-10 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
+              <CurrentIcon className="w-8 h-8 text-primary-foreground" />
             </div>
           </div>
 
-          <h1 className="text-4xl font-bold text-foreground mb-3">
+          <h1 className="text-2xl font-semibold text-foreground mb-2">
             {steps[step].title}
           </h1>
-          <p className="text-muted-foreground text-lg mb-8">
+          <p className="text-muted-foreground mb-8">
             {steps[step].description}
           </p>
 
-          <div className="space-y-3 mb-12 text-left max-w-md mx-auto">
+          <div className="space-y-3 mb-10 text-left max-w-sm mx-auto">
             {steps[step].details.map((detail, i) => (
               <div key={i} className="flex items-start gap-3">
-                <Zap className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-foreground">{detail}</span>
+                <Zap className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm text-muted-foreground">{detail}</span>
               </div>
             ))}
           </div>
 
-          <div className="flex gap-3 justify-center mb-6">
+          <div className="flex gap-2 justify-center mb-6">
             {steps.map((_, i) => (
               <div
                 key={i}
-                className={`h-2 rounded-full transition-all ${
-                  i === step ? 'bg-primary w-8' : 'bg-border w-2'
+                className={`h-1.5 rounded-full transition-all ${
+                  i === step ? 'bg-primary w-6' : 'bg-border w-1.5'
                 }`}
               />
             ))}
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             {step > 0 && (
               <Button
                 variant="outline"

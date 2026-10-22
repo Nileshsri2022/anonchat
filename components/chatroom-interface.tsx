@@ -121,7 +121,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
           if (isSystem) {
             return (
               <div key={msg.id} className="flex justify-center">
-                <div className="bg-muted/50 px-4 py-2 rounded-full text-xs text-muted-foreground max-w-md text-center">
+                <div className="bg-card border border-border px-4 py-1.5 rounded-full text-xs text-muted-foreground max-w-md text-center">
                   {msg.content}
                 </div>
               </div>
@@ -131,7 +131,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
           return (
             <div key={msg.id} className={`flex gap-3 ${isCurrentUser ? 'justify-end' : ''}`}>
               {!isCurrentUser && (
-                <div className={`w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold ${userColor}`}>
+                <div className={`w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground`}>
                   {msg.username[0]}
                 </div>
               )}
@@ -152,7 +152,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
                 <div
                   className={`px-4 py-2 rounded-2xl ${isCurrentUser
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-foreground'
+                    : 'bg-card border border-border text-foreground'
                     }`}
                 >
                   <p className="text-sm break-words">{msg.content}</p>
@@ -164,7 +164,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
                 </div>
               </div>
               {isCurrentUser && (
-                <div className={`w-8 h-8 rounded-full bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground`}>
+                <div className={`w-8 h-8 rounded-full bg-primary/90 flex items-center justify-center text-xs font-semibold text-primary-foreground`}>
                   {msg.username[0]}
                 </div>
               )}
@@ -197,7 +197,12 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
             <option value={3600000}>1h</option>
             <option value={86400000}>24h</option>
           </select>
-          <Button onClick={handleSendMessage} disabled={!message.trim() || !isConnected}>
+          <Button
+            onClick={handleSendMessage}
+            disabled={!message.trim() || !isConnected}
+            size="icon"
+            className="size-10 rounded-full shrink-0 self-end mb-0.5"
+          >
             <Send className="w-4 h-4" />
           </Button>
         </div>

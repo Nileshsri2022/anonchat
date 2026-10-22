@@ -1,11 +1,12 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, Shield, Plus, Settings, UsersRound, Lock } from 'lucide-react';
+import { Users, Shield, Plus, Settings, Lock, Search } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Input } from '@/components/ui/input';
 
 export interface Room {
   id: string;
@@ -15,6 +16,7 @@ export interface Room {
   encrypted: boolean;
   isProtected?: boolean;
   passphrase?: string;
+  roomKeyB64?: string;
 }
 
 interface RoomListProps {
@@ -22,11 +24,19 @@ interface RoomListProps {
   selectedId: string | null;
   onSelect: (roomId: string) => void;
   onCreateRoom: () => void;
-  onCreateGroup?: () => void;
   onOpenSettings?: () => void;
 }
 
-export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onCreateGroup, onOpenSettings }: RoomListProps) {
+export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onOpenSettings }: RoomListProps) {
+  const [query, setQuery] = useState('');
+  const [anonId, setAnonId] = useState('');
+  useEffect(() => {
+    const id = localStorage.getItem('anonchat_userid') || '';
+    setAnonId(id ? `anon-${id.slice(5, 9)}` : 'anon');
+  }, []);
+  const visible = query.trim()
+    ? rooms.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : rooms;
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="pl-4 pr-12 pt-4 pb-3 border-b border-border">
@@ -43,40 +53,41 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
               <Plus className="w-4 h-4 mr-1" />
               New
             </Button>
-            {onCreateGroup && rooms.length > 0 && (
-              <Button size="sm" variant="outline" onClick={onCreateGroup}>
-                <UsersRound className="w-4 h-4" />
-              </Button>
-            )}
           </div>
         </div>
-        <div className="text-xs text-muted-foreground">
-          Join or create anonymous encrypted chatrooms
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search rooms"
+            className="pl-9 h-9 bg-background"
+          />
         </div>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {rooms.length === 0 ? (
+          {visible.length === 0 ? (
             <div className="text-center py-8 px-4">
               <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
                 <Users className="w-6 h-6 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                No rooms yet. Create or join a room to start chatting.
+                {query.trim() ? 'No rooms match your search.' : 'No rooms yet. Create or join a room to start chatting.'}
               </p>
               <Button size="sm" onClick={onCreateRoom} variant="outline">
                 Create Room
               </Button>
             </div>
           ) : (
-            rooms.map((room) => (
+            visible.map((room) => (
               <button
                 key={room.id}
                 onClick={() => onSelect(room.id)}
-                className={`w-full p-3 rounded-lg text-left transition-colors ${selectedId === room.id
-                  ? 'bg-primary/10 border border-primary/20'
-                  : 'hover:bg-muted border border-transparent'
+                className={`w-full p-3 rounded-lg text-left transition-colors border-l-2 ${selectedId === room.id
+                  ? 'bg-primary/5 border-primary'
+                  : 'hover:bg-muted/60 border-transparent'
                   }`}
               >
                 <div className="flex items-start justify-between mb-1">
@@ -113,6 +124,20 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
           )}
         </div>
       </ScrollArea>
+
+      {/* identity footer (mockup 02) */}
+      <div className="border-t border-border px-4 py-3 flex items-center gap-3">
+        <div className="relative">
+          <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground">
+            {anonId.slice(5, 6).toUpperCase() || 'A'}
+          </div>
+          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success border-2 border-card" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">{anonId || 'anon'}</p>
+          <p className="text-xs text-muted-foreground">anonymous · encrypted</p>
+        </div>
+      </div>
     </div>
   );
 });
