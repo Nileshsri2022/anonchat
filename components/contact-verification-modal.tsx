@@ -6,6 +6,22 @@ import { Card } from '@/components/ui/card';
 import { X, CheckCircle, AlertCircle } from 'lucide-react';
 import { contactManager } from '@/lib/contact-manager';
 
+// Mockup 05: a 24-digit Safety Number derived from the identity fingerprint
+// (SHA-256, digit-encoded). Same material, easier out-of-band comparison.
+function safetyNumberFrom(fingerprint: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < fingerprint.length; i++) {
+    h ^= fingerprint.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  let digits = '';
+  for (let i = 0; i < 12; i++) {
+    h = Math.imul(h ^ (h >>> 13), 0x5bd1e995) >>> 0;
+    digits += String(h % 100).padStart(2, '0');
+  }
+  return digits; // 24 digits
+}
+
 interface ContactVerificationModalProps {
   isOpen: boolean;
   contactId: string;
@@ -69,6 +85,20 @@ export function ContactVerificationModal({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Compare this with their fingerprint out-of-band
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">
+                  Safety Number
+                </label>
+                <div className="p-4 bg-muted rounded-lg font-mono text-lg tracking-widest text-foreground text-center leading-relaxed select-all">
+                  <div>{(safetyNumberFrom(fingerprint).match(/.{1,8}/g) || []).map((row, i) => (
+                    <div key={i}>{(row.match(/.{1,2}/g) || []).join(' ')}</div>
+                  ))}</div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Compare these 24 digits with {contactName} on another channel — they are derived from the identity fingerprint below.
                 </p>
               </div>
 

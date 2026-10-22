@@ -38,7 +38,7 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
     ? rooms.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()))
     : rooms;
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 relative">
       <div className="pl-4 pr-12 pt-4 pb-3 border-b border-border">
         <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
           <h2 className="font-semibold text-base text-foreground">AnonChat</h2>
@@ -49,7 +49,7 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
                 <Settings className="w-4 h-4" />
               </Button>
             )}
-            <Button size="sm" onClick={onCreateRoom}>
+            <Button size="sm" onClick={onCreateRoom} className="max-sm:hidden">
               <Plus className="w-4 h-4 mr-1" />
               New
             </Button>
@@ -130,6 +130,15 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
           )}
         </div>
       </ScrollArea>
+
+      {/* mobile FAB (mockup 11) */}
+      <button
+        onClick={onCreateRoom}
+        aria-label="New room"
+        className="sm:hidden absolute bottom-20 right-4 z-10 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
 
       {/* identity footer (mockup 02) */}
       <div className="border-t border-border px-4 py-3 flex items-center gap-3">

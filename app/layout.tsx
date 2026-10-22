@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ServiceWorkerRegistrar } from '@/components/service-worker-registrar'
+import '@fontsource-variable/inter';
 import './globals.css'
 
 export const metadata: Metadata = {

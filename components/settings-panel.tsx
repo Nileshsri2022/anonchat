@@ -3,7 +3,8 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { X, Trash2, Download, Shield, Bell } from 'lucide-react';
+import { X, Trash2, Download, Shield, Bell, Sun, Moon } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { ProfilePassphraseSettings } from '@/components/profile-passphrase-settings';
 import { DisplayNameSetting } from '@/components/display-name-setting';
 
@@ -13,6 +14,8 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
+  const { theme, setTheme } = useTheme();
+
   if (!isOpen) return null;
 
   return (
@@ -124,7 +127,26 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             </div>
           </div>
         </div>
-      </Card>
+            {/* Appearance (mockup 06) */}
+      <div className="flex items-center justify-between py-3 border-t border-border mt-2">
+        <span className="text-sm font-medium text-foreground">Appearance</span>
+        <div className="flex rounded-lg border border-border p-0.5">
+          <button
+            onClick={() => setTheme('light')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${theme !== 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            <Sun className="w-3.5 h-3.5" /> Light
+          </button>
+          <button
+            onClick={() => setTheme('dark')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${theme === 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            <Moon className="w-3.5 h-3.5" /> Dark
+          </button>
+        </div>
+      </div>
+
+</Card>
     </div>
   );
 }
