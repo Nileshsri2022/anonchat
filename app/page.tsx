@@ -57,7 +57,7 @@ export default function Home() {
 
   useEffect(() => {
     // Identity Vault: load the persisted identity (or create one on first launch).
-    import('@/lib/vault-instance').then(({ getOrCreateVault }) => getOrCreateVault())
+    import('@/lib/instances').then(({ getOrCreateVault }) => getOrCreateVault())
       .then(() => { /* vault ready */ })
       .catch((e) => console.error('Identity Vault failed to load:', e));
 

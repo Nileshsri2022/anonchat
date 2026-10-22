@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, KeyRound, Lock, LockOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getOrCreateVault } from '@/lib/vault-instance';
-import { getStorageKeyManager, resetHistoryStorage } from '@/lib/storage-key-instance';
+import { getOrCreateVault } from '@/lib/instances';
+import { getStorageKeyManager, resetHistoryStorage } from '@/lib/instances';
 
 /**
  * Local-data vault controls: shows the seal state of locally stored data,

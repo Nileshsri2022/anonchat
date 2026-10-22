@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Contact } from '@/lib/contact-manager';
 import type { DecryptedMessage, MessageEnvelope } from '@/lib/direct-message-session';
-import { getDmClient } from '@/lib/dm-client-instance';
+import { getDmClient } from '@/lib/instances';
 import { isControlPayload } from '@/lib/control-payloads';
 import { getOutbox } from '@/lib/outbox';
 import { contactManager } from '@/lib/contact-manager';

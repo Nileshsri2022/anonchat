@@ -6,7 +6,7 @@ import { relayAPI, RelayMessage } from '@/lib/relay-api';
 import { roomEncryption } from '@/lib/room-encryption';
 import { socketService } from '@/lib/socket-service';
 import type { StoredMessage } from '@/lib/message-storage';
-import { getEncryptedHistoryStorage } from '@/lib/storage-key-instance';
+import { getEncryptedHistoryStorage } from '@/lib/instances';
 import {
   RoomSenderKeyCoordinator,
   registerRoomCoordinator,
@@ -15,7 +15,7 @@ import {
 } from '@/lib/room-sender-keys';
 import type { IdentityBundle } from '@/lib/identity-bundle';
 import type { Contact } from '@/lib/contact-manager';
-import { getDmClient } from '@/lib/dm-client-instance';
+import { getDmClient } from '@/lib/instances';
 
 export interface Message {
   id: string;

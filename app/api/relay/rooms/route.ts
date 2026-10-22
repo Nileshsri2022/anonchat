@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateAnonymousId } from '@/lib/tor-integration';
 import { roomRegistry } from '@/lib/room-registry';
-import { relayCore } from '@/lib/relay-core-instance';
+import { relayCore } from '@/lib/instances';
 
 export async function GET() {
   try {

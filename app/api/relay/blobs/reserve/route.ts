@@ -1,7 +1,7 @@
 // Reserve a blob id before upload: the client needs the id to bind it into
 // the attachment's AEAD additional data BEFORE encrypting (ADR-0009, ticket 20).
 import { NextRequest, NextResponse } from 'next/server';
-import { relayCore } from '@/lib/relay-core-instance';
+import { relayCore } from '@/lib/instances';
 
 export async function POST(request: NextRequest) {
   try {
