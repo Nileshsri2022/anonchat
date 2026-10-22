@@ -5,5 +5,4 @@ export * from './qr-generator';
 export * from './room-encryption';
 export * from './socket-service';
 export * from './message-storage';
-export * from './tor-integration';
 export * from './api-client';

@@ -13,7 +13,7 @@ Spec: issue #14. Tickets: #15–#26 (native blocking edges). Process: per-ticket
 | 08 | Names + badges | #22 | ✅ implemented | 0 hard · name INSIDE the PQ-signed material (tamper → reject); sanity limits; profile editor; intro + invite propagation | see git |
 | 09 | PWA shell | #23 | ✅ implemented | 0 hard · manifest sanity + SW network-only-API asserted by test; badge lifecycle test | see git |
 | 10 | Encrypted outbox | #24 | ✅ implemented | 0 hard · sealed queue (same key scheme as history); flush+retry, in-order; FIXED failed-first-send killing a session (PQ ct lost) | see git |
-| 11 | Arch deepening | #25 | blocked by #18,#20 | | |
+| 11 | Arch deepening | #25 | ✅ implemented | 0 hard · TransportAdapter seam (2 adapters, tested once vs RelayCore); redis/better-sqlite3/keytar removed; Tor behind a narrow bridge interface | see git |
 | 12 | Golden E2E | #26 | blocked by #16–#25 | | |
 
 Suite at 01: 57 tests / 221 expects green · tsc clean · offline build green.
