@@ -17,3 +17,7 @@ Spec: issue #14. Tickets: #15–#26 (native blocking edges). Process: per-ticket
 | 12 | Golden E2E | #26 | ✅ implemented | 41 asserts, one test: PQ→sealed→intro room→blob→outbox→purge→sealed reload; relay audited blind at the end; FIXED name-aware PQ verify at use | see git |
 
 Final: 89 tests / 423 expects green · tsc clean · offline build green. All 12 tickets (#15–#26) closed.
+
+
+## WAVE COMPLETE (2026-10-22)
+All 12 tickets (#15–#26) shipped via PR #27. Spec issue #14 closed out by the wave-completion commit on master (the Arena token cannot close/comment on issues).

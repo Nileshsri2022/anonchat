@@ -18,3 +18,7 @@ so per-ticket status lives here until it can be mirrored into the final PR.
 | 10 Full-flow E2E | #12 | ✅ implemented | S3 golden seam green: 3 stacks / 1 relay, whole story in 1 test (20 asserts); dup delivery + self-echo made idempotent; broken dead kdfChain removed (finding 4 closed) | 970f2e0 |
 
 Test seams (agreed): S1 lib module interfaces · S2 relay HTTP · S3 two-client E2E.
+
+
+## WAVE COMPLETE (2026-10-22)
+All 10 tickets (#3–#12) shipped via PR #13. Spec issue #2 closed out by the wave-completion commit on master (the Arena token cannot close/comment on issues).
