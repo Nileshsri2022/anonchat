@@ -1,6 +1,16 @@
 import { webcrypto } from 'crypto';
 import type { Contact } from './contact-manager';
-import type { IdentityKeys, PreKeys } from './crypto';
+
+export interface IdentityKeys {
+  publicKey: CryptoKey;
+  privateKey: CryptoKey;
+}
+
+export interface PreKeys {
+  id: number;
+  publicKey: CryptoKey;
+  privateKey: CryptoKey;
+}
 
 const crypto = globalThis.crypto || webcrypto;
 

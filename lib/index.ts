@@ -1,4 +1,3 @@
-export * from './crypto';
 export * from './contact-manager';
 export * from './direct-message-session';
 export * from './identity-service';

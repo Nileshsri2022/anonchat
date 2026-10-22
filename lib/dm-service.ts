@@ -112,13 +112,30 @@ export class DirectMessageClient {
   /**
    * Responder or existing-session receiver. An envelope for an unknown channel
    * completes the X3DH handshake with our vault Pre-Key and opens the session.
+   * Duplicate deliveries (the same envelope can arrive via the Pairwise Channel
+   * room and the inbox room, or via both socket push and catch-up polling) are
+   * idempotent: they return null instead of surfacing a replay error.
    */
-  async handleInboundEnvelope(envelope: MessageEnvelope): Promise<DecryptedMessage> {
+  async handleInboundEnvelope(envelope: MessageEnvelope): Promise<DecryptedMessage | null> {
+    // Catch-up polling (and multi-room fan-out) can hand us our own envelopes;
+    // they are never inbound messages.
+    if (envelope.senderIdentityPublic?.trim() === (await this.ownIdentityPublic())) {
+      return null;
+    }
+
     let session = this.sessions.get(envelope.channelId);
     if (!session) {
       session = await this.newSession();
     }
-    const decrypted = await session.receiveEnvelope(envelope);
+    let decrypted: DecryptedMessage;
+    try {
+      decrypted = await session.receiveEnvelope(envelope);
+    } catch (e) {
+      if (e instanceof Error && /replayed message rejected/i.test(e.message)) {
+        return null; // already processed — duplicate delivery
+      }
+      throw e;
+    }
     this.sessions.set(decrypted.channelId, session);
     this.remoteIdentityByChannel.set(decrypted.channelId, envelope.senderIdentityPublic);
     this.messagesLog.push(decrypted);

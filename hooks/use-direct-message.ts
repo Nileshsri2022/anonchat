@@ -64,7 +64,7 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
     if ((raw as MessageEnvelope).senderId === currentUser.id) return;
     try {
       const decrypted = await client.handleInboundEnvelope(raw as MessageEnvelope);
-      appendMessage(decrypted);
+      if (decrypted) appendMessage(decrypted);
     } catch (err) {
       console.error('Failed to decrypt inbound DM envelope:', err);
     }
