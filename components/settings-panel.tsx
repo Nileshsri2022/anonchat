@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { X, Trash2, Download, Shield, Bell } from 'lucide-react';
 import { ProfilePassphraseSettings } from '@/components/profile-passphrase-settings';
+import { DisplayNameSetting } from '@/components/display-name-setting';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -92,6 +93,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
             {/* Local Data Vault */}
             <div className="space-y-4 pt-4 border-t border-border">
+              <DisplayNameSetting />
               <ProfilePassphraseSettings />
             </div>
 

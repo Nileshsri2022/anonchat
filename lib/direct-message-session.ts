@@ -1,7 +1,7 @@
 import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 import { webcrypto } from 'crypto';
 import type { Contact } from './contact-manager';
-import { PQ_SIGNATURE_DOMAIN } from './identity-bundle';
+import { pqSignedMaterial } from './identity-bundle';
 
 export interface IdentityKeys {
   publicKey: CryptoKey;
@@ -183,10 +183,7 @@ export class DirectMessageSession {
       await this.verifySignatureOver(
         identitySigningPublicKey,
         pqKemSignatureB64,
-        new Uint8Array([
-          ...new TextEncoder().encode(PQ_SIGNATURE_DOMAIN),
-          ...this.b64ToBytes(pqKemPublicB64),
-        ]),
+        new Uint8Array([...new TextEncoder().encode(pqSignedMaterial(pqKemPublicB64))]),
       );
       const encapsulated = ml_kem768.encapsulate(this.b64ToBytes(pqKemPublicB64));
       pqShared = this.copyBytes(encapsulated.sharedSecret);

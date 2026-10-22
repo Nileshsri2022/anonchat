@@ -90,6 +90,25 @@ describe('PQ hybrid handshake (ticket 15)', () => {
     await expect(validateBundle(halfPq)).rejects.toThrow();
   });
 
+  test('S1: optional displayName travels inside the signed material (ticket 22)', async () => {
+    const vault = await IdentityVault.create({ store: new MemoryKVStore(), iterations: ITERS });
+
+    const named = await exportIdentityBundle(vault, 'Nebula');
+    expect(named.displayName).toBe('Nebula');
+    await validateBundle(named);
+    const parsed = parseInvite(serializeInvite(named));
+    expect(parsed.displayName).toBe('Nebula');
+    await validateBundle(parsed);
+
+    // A tampered name breaks the signature: impersonating a name is rejected
+    const tampered: IdentityBundle = { ...named, displayName: 'Fake' };
+    await expect(validateBundle(tampered)).rejects.toThrow(/PQ key signature/);
+
+    // Sanity limits
+    await expect(exportIdentityBundle(vault, 'a'.repeat(65))).rejects.toThrow(/too long/);
+    await expect(exportIdentityBundle(vault, 'bad\u0000name')).rejects.toThrow(/control characters/);
+  });
+
   test('S1: a v1 bundle without PQ fields still validates (classical path stays open)', async () => {
     const vault = await IdentityVault.create({ store: new MemoryKVStore(), iterations: ITERS });
     const v2 = await exportIdentityBundle(vault);

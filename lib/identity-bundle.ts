@@ -18,6 +18,8 @@ export interface IdentityBundle {
   pqKemPublicB64?: string;
   /** ECDSA-P256-SHA-256 signature over the PQ key bytes (base64) — present iff version 2. */
   pqKemSignatureB64?: string;
+  /** Optional self-chosen Display Name — v2 only, inside the signed material. */
+  displayName?: string;
   createdAt: number;
 }
 
@@ -35,8 +37,12 @@ function b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
 }
 
 /** Exports the vault's public Identity Bundle (vault must be unlocked). */
-export async function exportIdentityBundle(vault: IdentityVault): Promise<IdentityBundle> {
+export async function exportIdentityBundle(
+  vault: IdentityVault,
+  displayName?: string,
+): Promise<IdentityBundle> {
   const data = await vault.getIdentityData();
+  const name = sanitizeDisplayName(displayName);
   const base: IdentityBundle = {
     version: 1,
     identityPublicKeySpkiB64: data.identity.publicKeySpkiB64,
@@ -50,14 +56,31 @@ export async function exportIdentityBundle(vault: IdentityVault): Promise<Identi
 
   const pqPublicB64 = vault.getPqKemPublicB64();
   const signing = await vault.getSigningKeyPair();
-  const signed = new Uint8Array([...new TextEncoder().encode(PQ_SIGNATURE_DOMAIN), ...b64ToBytes(pqPublicB64)]);
+  const signed = new Uint8Array([
+    ...new TextEncoder().encode(pqSignedMaterial(pqPublicB64, name)),
+  ]);
   const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, signing.privateKey, signed);
   return {
     ...base,
     version: 2,
     pqKemPublicB64: pqPublicB64,
     pqKemSignatureB64: bytesToB64(signature),
+    ...(name ? { displayName: name } : {}),
   };
+}
+
+/** The signed material covers the PQ key AND the display name (ticket 22). */
+export function pqSignedMaterial(pqPublicB64: string, displayName?: string): string {
+  return `${PQ_SIGNATURE_DOMAIN}|${pqPublicB64}|${displayName ?? ''}`;
+}
+
+/** Display names are optional, short, printable — anonymity stays the default. */
+export function sanitizeDisplayName(name?: string): string | undefined {
+  const trimmed = name?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length > 64) throw new Error('Display name too long (max 64 chars)');
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) throw new Error('Display name contains control characters');
+  return trimmed;
 }
 
 /** Serialises a bundle into a copyable Invite string. */
@@ -86,6 +109,9 @@ export function parseInvite(invite: string): IdentityBundle {
   const pqFieldsOk =
     (b.pqKemPublicB64 === undefined && b.pqKemSignatureB64 === undefined) ||
     (isB64(b.pqKemPublicB64) && isB64(b.pqKemSignatureB64));
+  const nameOk =
+    b.displayName === undefined ||
+    (typeof b.displayName === 'string' && b.displayName.trim().length > 0 && b.displayName.length <= 64);
   if (
     (b.version !== 1 && b.version !== 2) ||
     !isB64(b.identityPublicKeySpkiB64) ||
@@ -94,7 +120,8 @@ export function parseInvite(invite: string): IdentityBundle {
     !isB64(b.preKeySignatureB64) ||
     typeof b.preKeyId !== 'number' ||
     typeof b.createdAt !== 'number' ||
-    !pqFieldsOk
+    !pqFieldsOk ||
+    !nameOk
   ) {
     throw new Error('Invite payload is missing or has invalid Identity Bundle fields');
   }
@@ -125,9 +152,9 @@ export async function validateBundle(bundle: IdentityBundle): Promise<void> {
     throw new Error('Identity Bundle PQ key and signature must be present together');
   }
   if (bundle.pqKemPublicB64 && bundle.pqKemSignatureB64) {
+    const name = sanitizeDisplayName(bundle.displayName);
     const pqSigned = new Uint8Array([
-      ...new TextEncoder().encode(PQ_SIGNATURE_DOMAIN),
-      ...b64ToBytes(bundle.pqKemPublicB64),
+      ...new TextEncoder().encode(pqSignedMaterial(bundle.pqKemPublicB64, name)),
     ]);
     const pqOk = await crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' },

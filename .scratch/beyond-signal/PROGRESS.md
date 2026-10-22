@@ -10,7 +10,7 @@ Spec: issue #14. Tickets: #15–#26 (native blocking edges). Process: per-ticket
 | 05 | Relay blob store | #19 | ✅ implemented | 0 hard · result-pattern matched postMessage contract; 6 S2 tests (round-trip, 413, 429, TTL, 404, no-metadata) | see git |
 | 06 | Attachments + voice | #20 | ✅ implemented | 0 hard · AAD binds blobId+name+mime (swap attack fails); reserve-then-upload flow; DM UI: attach, MediaRecorder voice, thumbnails, honest expiry | see git |
 | 07 | Typing + receipts | #21 | ✅ implemented | 0 hard · controls ride the sealed channel; receipts OFF by default + per-contact opt-in (zero leaks when off); typing throttled 2.5s | see git |
-| 08 | Names + badges | #22 | blocked by #15,#18 | | |
+| 08 | Names + badges | #22 | ✅ implemented | 0 hard · name INSIDE the PQ-signed material (tamper → reject); sanity limits; profile editor; intro + invite propagation | see git |
 | 09 | PWA shell | #23 | ✅ implemented | 0 hard · manifest sanity + SW network-only-API asserted by test; badge lifecycle test | see git |
 | 10 | Encrypted outbox | #24 | blocked by #16,#23 | | |
 | 11 | Arch deepening | #25 | blocked by #18,#20 | | |

@@ -83,6 +83,9 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
               roomId,
               bundle.identityPublicKeySpkiB64,
               bundle.identitySigningPublicKeySpkiB64,
+              typeof window !== 'undefined'
+                ? localStorage.getItem('anonchat_display_name') ?? undefined
+                : undefined,
             );
             coordinator.setSelfBundle(bundle);
             registerRoomCoordinator(coordinator);
