@@ -104,6 +104,21 @@ export class SenderKeyRatchet {
     return this.messageNumber;
   }
 
+  /** Receiver side: advance to a distribution watermark. Every skipped
+   *  position's key is derived and DISCARDED (never cached) and its slot is
+   *  consumed-marked, so pre-join history is undecryptable even if a relay
+   *  buffer replays it at us (ADR-0008 no-history guarantee). The watermark n
+   *  is the sender's next position — the first decryptable slot. */
+  async advanceTo(n: number): Promise<void> {
+    if (n <= this.messageNumber) return; // nothing to skip
+    while (this.messageNumber < n) {
+      const nextChain = await hkdf(new Uint8Array(this.chainKey), STEP_INFO, String(this.epoch));
+      this.chainKey = nextChain;
+      this.consumed.add(`${this.epoch}:${this.messageNumber}`);
+      this.messageNumber++;
+    }
+  }
+
   /** Rotation (ADR-0008): fresh seed + epoch after membership changes. Returns
    *  the new seed for pairwise distribution; this ratchet keeps sending on the
    *  new epoch. Holders of the old seed cannot read the new epoch. */

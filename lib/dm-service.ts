@@ -156,7 +156,18 @@ export class DirectMessageClient {
       if (e instanceof Error && /replayed message rejected/i.test(e.message)) {
         return null; // already processed — duplicate delivery
       }
-      throw e;
+      // Double-initiate collision (#18): both peers opened sessions on the same
+      // Pairwise Channel before either received. Our initiator session has never
+      // decrypted anything, so the peer's initiation wins: retry once with a
+      // fresh responder session and keep whichever actually decrypts.
+      if (session.hasReceivedMessage()) throw e;
+      try {
+        const retry = await this.newSession();
+        decrypted = await retry.receiveEnvelope(envelope);
+        session = retry;
+      } catch {
+        throw e; // original failure — not a collision (tamper, corruption, …)
+      }
     }
     this.sessions.set(decrypted.channelId, session);
     const remoteIdentity = decrypted.senderIdentityPublic ?? envelope.senderIdentityPublic;

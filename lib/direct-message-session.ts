@@ -94,6 +94,8 @@ export class DirectMessageSession {
   private sendMessageNumber = 0;
   private recvMessageNumber = 0;
   private previousChainLength = 0;
+  /** True once any inbound envelope decrypted successfully (collision recovery, #18). */
+  private receivedAny = false;
 
   private readonly pqDecapsulate?: (cipherText: Uint8Array) => Promise<Uint8Array<ArrayBuffer>>;
   private readonly selfSigningKeys?: { publicKey: CryptoKey; privateKey: CryptoKey };
@@ -123,6 +125,11 @@ export class DirectMessageSession {
 
   getChannelId(): string | undefined {
     return this.channelId;
+  }
+
+  /** Whether this session ever successfully decrypted an inbound message. */
+  hasReceivedMessage(): boolean {
+    return this.receivedAny;
   }
 
   getHistory(): DecryptedMessage[] {
@@ -530,6 +537,7 @@ export class DirectMessageSession {
       if (oldest !== undefined) this.consumedKeys.delete(oldest);
     }
 
+    this.receivedAny = true;
     const decryptedMsg: DecryptedMessage = {
       id: `dm_${envelope.timestamp}_${Math.random().toString(36).substr(2, 6)}`,
       channelId: envelope.channelId,
