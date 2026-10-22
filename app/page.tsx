@@ -167,10 +167,10 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-dvh bg-background overflow-hidden">
       {/* Sidebar with tabs */}
       {sidebarOpen && (
-        <div className="w-80 border-r border-border bg-muted/20 flex flex-col relative">
+        <div className="max-sm:fixed max-sm:inset-y-0 max-sm:left-0 max-sm:z-40 max-sm:w-full max-sm:bg-background max-sm:shadow-xl w-80 shrink-0 border-r border-border bg-muted/20 flex flex-col relative">
           {/* Close button */}
           <Button
             variant="ghost"

@@ -28,9 +28,9 @@ interface RoomListProps {
 
 export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onCreateGroup, onOpenSettings }: RoomListProps) {
   return (
-    <div className="w-80 border-r border-border bg-muted/20 flex flex-col">
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center justify-between mb-4">
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="pl-4 pr-12 pt-4 pb-3 border-b border-border">
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
           <h2 className="font-semibold text-lg text-foreground">Chatrooms</h2>
           <div className="flex items-center gap-2">
             <ThemeToggle />

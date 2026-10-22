@@ -38,7 +38,7 @@ export function RoomInfoPanel({
   };
 
   return (
-    <div className="w-80 border-l border-border bg-muted/20 flex flex-col">
+    <div className="max-sm:fixed max-sm:inset-y-0 max-sm:right-0 max-sm:z-40 max-sm:w-full max-sm:bg-background max-sm:shadow-xl w-80 shrink-0 border-l border-border bg-muted/20 flex flex-col">
       <div className="flex items-center justify-between p-4 border-b border-border">
         <h3 className="font-semibold">Room Info</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>

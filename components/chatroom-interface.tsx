@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Shield, Info, Users, Send, Copy, Check, QrCode, Timer, Lock } from 'lucide-react';
+import { Shield, Info, Users, Send, Copy, Check, QrCode, Timer, Lock, LogOut } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useChatroom } from '@/hooks/use-chatroom';
 import { QRContactModal } from '@/components/qr-contact-modal';
@@ -46,14 +46,14 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
   }, [roomId]);
 
   return (
-    <div className="flex-1 flex flex-col bg-background">
+    <div className="flex-1 flex flex-col bg-background min-w-0">
       {/* Tor Circuit Display - Always at top */}
-      <div className="p-4 border-b border-border/50">
+      <div className="px-3 py-2 sm:px-4 sm:py-3 border-b border-border/50">
         <TorCircuitDisplay />
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/20">
+      <div className="flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/20">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <Users className="w-5 h-5 text-primary" />
@@ -88,7 +88,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
         </div>
         <div className="flex items-center gap-2">
           <TorStatusIndicator />
-          <Badge variant="secondary" className="gap-1">
+          <Badge variant="secondary" className="gap-1 hidden md:inline-flex">
             <Shield className="w-3 h-3" />
             E2E Encrypted
           </Badge>
@@ -103,14 +103,15 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
           <Button variant="ghost" size="sm" onClick={onOpenInfo}>
             <Info className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={onLeaveRoom}>
-            Leave Room
+          <Button variant="ghost" size="sm" onClick={onLeaveRoom} title="Leave Room">
+            <LogOut className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Leave Room</span>
           </Button>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-4">
         {messages.map((msg) => {
           const isCurrentUser = msg.userId === currentUser.id;
           const isSystem = msg.userId === 'system';
@@ -134,7 +135,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
                   {msg.username[0]}
                 </div>
               )}
-              <div className={`flex flex-col gap-1 max-w-md ${isCurrentUser ? 'items-end' : ''}`}>
+              <div className={`flex flex-col gap-1 max-w-[85%] sm:max-w-md ${isCurrentUser ? 'items-end' : ''}`}>
                 {!isCurrentUser && (
                   <span className={`text-xs font-semibold ${userColor} flex items-center gap-1`}>
                     {msg.username}
@@ -174,7 +175,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
       </div>
 
       {/* Input */}
-      <div className="px-6 py-4 border-t border-border bg-muted/20">
+      <div className="px-3 sm:px-6 py-3 sm:py-4 border-t border-border bg-muted/20">
         <div className="flex gap-2">
           <Input
             placeholder={isConnected ? "Type a message..." : "Connecting..."}
@@ -187,7 +188,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
           <select
             value={messageTTL}
             onChange={(e) => setMessageTTL(Number(e.target.value))}
-            className="px-2 py-1 text-xs rounded-md border border-border bg-background"
+            className="px-2 py-2 sm:py-1 text-xs rounded-md border border-border bg-background"
             title="Disappearing messages"
           >
             <option value={0}>∞ Off</option>
