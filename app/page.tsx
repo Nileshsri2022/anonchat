@@ -65,30 +65,34 @@ export default function Home() {
       setShowOnboarding(false);
     }
 
-    // Check for pending contacts from QR scans
-    const pendingContact = localStorage.getItem('pending_contact');
-    if (pendingContact) {
+    // Check for pending Invites from QR scans (stored as the serialized invite string)
+    const pendingInvite = localStorage.getItem('pending_contact');
+    if (pendingInvite) {
       try {
-        const contactData = JSON.parse(pendingContact);
-        import('@/lib/contact-manager').then(({ contactManager }) => {
-          const existingContact = contactManager.getContact(contactData.id);
-          if (!existingContact) {
-            const contact = contactManager.addContact(
-              `Contact ${contactData.id.slice(-4)}`,
-              {
-                id: contactData.id,
-                identityPublicKey: contactData.identityPublic,
-                preKeyPublic: contactData.preKeyPublic,
-                preKeyId: contactData.preKeyId,
-                fingerprint: contactData.fingerprint || 'pending'
-              }
-            );
-            contactManager.establishEncryption(contact.id);
+        import('@/lib/contact-manager').then(async ({ contactManager }) => {
+          const { parseInvite, validateBundle } = await import('@/lib/identity-bundle');
+          const { identityService } = await import('@/lib/identity-service');
+          const bundle = parseInvite(pendingInvite);
+          await validateBundle(bundle);
+          const fingerprint = await identityService.generateFingerprint(bundle.identityPublicKeySpkiB64);
+          const existing = contactManager
+            .getAllContacts()
+            .find((c: { identity: { identityPublicKey: string } }) => c.identity.identityPublicKey === bundle.identityPublicKeySpkiB64);
+          if (!existing) {
+            contactManager.addContact(`Contact ${bundle.preKeyId.toString().padStart(2, '0')}`, {
+              id: `bundle_${bundle.identityPublicKeySpkiB64.slice(0, 12)}`,
+              identityPublicKey: bundle.identityPublicKeySpkiB64,
+              preKeyPublic: bundle.preKeyPublicSpkiB64,
+              preKeyId: bundle.preKeyId,
+              fingerprint,
+              identitySigningPublicKey: bundle.identitySigningPublicKeySpkiB64,
+              preKeySignature: bundle.preKeySignatureB64,
+            });
           }
           localStorage.removeItem('pending_contact');
         });
       } catch (error) {
-        console.error('❌ Failed to process pending contact:', error);
+        console.error('❌ Failed to process pending Invite:', error);
         localStorage.removeItem('pending_contact');
       }
     }

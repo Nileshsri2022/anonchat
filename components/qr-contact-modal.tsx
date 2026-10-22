@@ -3,15 +3,29 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { X, Copy, RefreshCw, Upload, Eye, EyeOff } from 'lucide-react';
-import { generateQRCodeSVG, encodeContactQR, generateContactQRData, parseContactQRData } from '@/lib/qr-generator';
-import { generateIdentityKeys, generateEphemeralKeys, exportKeyToBase64 } from '@/lib/crypto';
+import { X, Copy, RefreshCw, Upload, Eye, EyeOff, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { generateQRCodeSVG } from '@/lib/qr-generator';
+import {
+  serializeInvite,
+  parseInvite,
+  validateBundle,
+  exportIdentityBundle,
+  type IdentityBundle,
+} from '@/lib/identity-bundle';
+import { getOrCreateVault } from '@/lib/vault-instance';
+import { contactManager, type Contact } from '@/lib/contact-manager';
 import { identityService } from '@/lib/identity-service';
 
 interface QRContactModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddContact?: (data: any) => void;
+  onAddContact?: (contact: Contact) => void;
+}
+
+interface PendingInvite {
+  invite: string;
+  bundle: IdentityBundle;
+  fingerprint: string;
 }
 
 export function QRContactModal({
@@ -20,111 +34,112 @@ export function QRContactModal({
   onAddContact,
 }: QRContactModalProps) {
   const [qrImage, setQrImage] = useState<string>('');
-  const [contactData, setContactData] = useState<any>(null);
-  const [sessionId, setSessionId] = useState('');
+  const [myInvite, setMyInvite] = useState<string>('');
+  const [myFingerprint, setMyFingerprint] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<'generate' | 'scan'>('generate');
-  const [scannedData, setScannedData] = useState<string>('');
   const [parseError, setParseError] = useState<string>('');
   const [showIdentity, setShowIdentity] = useState(false);
-  const [pendingContact, setPendingContact] = useState<any>(null);
+  const [pendingContact, setPendingContact] = useState<PendingInvite | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      // Check for pending contacts from QR scans
-      const pending = localStorage.getItem('pending_contact');
-      if (pending) {
-        try {
-          const contactData = JSON.parse(pending);
-          setPendingContact(contactData);
-          setMode('scan');
-        } catch (error) {
-          console.error('Failed to parse pending contact:', error);
-        }
-      }
+    if (!isOpen) return;
 
-      if (mode === 'generate') {
-        generateNewQR();
+    // A pending Invite may exist from a QR link-out (stored as the invite string).
+    const pending = localStorage.getItem('pending_contact');
+    if (pending) {
+      try {
+        buildPending(pending).then(setPendingContact).catch(() => localStorage.removeItem('pending_contact'));
+        setMode('scan');
+      } catch {
+        localStorage.removeItem('pending_contact');
       }
     }
+
+    if (mode === 'generate') {
+      generateMyInvite();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, mode]);
 
-  const generateNewQR = async () => {
+  /** Build the real Invite from the persistent Identity Vault — never throwaway keys. */
+  const generateMyInvite = async () => {
     try {
-      // Generate real cryptographic keys
-      const identityKeys = await generateIdentityKeys();
-      const preKeys = await generateEphemeralKeys();
-
-      // Export keys to base64 for QR encoding
-      const identityPublic = await exportKeyToBase64(identityKeys.publicKey);
-      const preKeyPublic = await exportKeyToBase64(preKeys.publicKey);
-
-      // Generate fingerprint for identity verification
-      const fingerprint = await identityService.generateFingerprint(identityPublic);
+      const vault = await getOrCreateVault();
+      if (vault.isSealed()) {
+        setParseError('Your data is sealed — unlock it in Settings → Local data to share your Invite');
+        return;
+      }
+      const bundle = await exportIdentityBundle(vault);
+      const invite = serializeInvite(bundle);
+      const fingerprint = await identityService.generateFingerprint(bundle.identityPublicKeySpkiB64);
       identityService.storeFingerprint('current_user', fingerprint);
 
-      const qrData = generateContactQRData(identityPublic, preKeyPublic, 1);
-      const encoded = encodeContactQR(qrData);
-
-      console.log('📱 QR Code Generated for Contact:', qrData.id);
-      console.log('🔑 Identity Key (first 20 chars):', identityPublic.substring(0, 20) + '...');
-      console.log('🔑 Pre-Key (first 20 chars):', preKeyPublic.substring(0, 20) + '...');
-
-      setContactData(qrData);
-      setSessionId(qrData.id);
-      const qrSvg = await generateQRCodeSVG(encoded, 280);
+      const qrSvg = await generateQRCodeSVG(invite, 280);
+      setMyInvite(invite);
+      setMyFingerprint(fingerprint);
       setQrImage(qrSvg);
       setParseError('');
-    } catch (error) {
-      console.error('Failed to generate QR code:', error);
-      setParseError('Failed to generate QR code');
-    }
-  };
-
-  const copySessionId = () => {
-    if (contactData) {
-      navigator.clipboard.writeText(encodeContactQR(contactData));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      setParseError(e instanceof Error ? e.message : 'Failed to generate Invite');
     }
   };
 
   const handlePasteQR = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      setScannedData(text);
-      const parsed = parseContactQRData(text);
-      setParseError('');
-
-      if (onAddContact) {
-        onAddContact(parsed);
-      }
-    } catch (error) {
-      setParseError('Invalid QR data format');
+      acceptInvite(text);
+    } catch {
+      setParseError('Could not read the clipboard');
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const text = event.target?.result as string;
-          const parsed = parseContactQRData(text);
-          setScannedData(text);
-          setParseError('');
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => acceptInvite((event.target?.result as string) ?? '');
+    reader.readAsText(file);
+  };
 
-          if (onAddContact) {
-            onAddContact(parsed);
-          }
-        } catch (error) {
-          setParseError('Invalid QR data in file');
-        }
-      };
-      reader.readAsText(file);
+  /** Parse + validate an Invite string, then stage it for confirmation. */
+  const acceptInvite = (text: string) => {
+    try {
+      buildPending(text).then(setPendingContact).catch((e) => setParseError(e instanceof Error ? e.message : 'Invalid Invite'));
+      setParseError('');
+    } catch (e) {
+      setParseError(e instanceof Error ? e.message : 'Invalid Invite');
     }
+  };
+
+  const confirmPending = () => {
+    if (!pendingContact) return;
+    const b = pendingContact.bundle;
+    const contact = contactManager.addContact(`Contact ${b.preKeyId.toString().padStart(2, '0')}`, {
+      id: `bundle_${b.identityPublicKeySpkiB64.slice(0, 12)}`,
+      identityPublicKey: b.identityPublicKeySpkiB64,
+      preKeyPublic: b.preKeyPublicSpkiB64,
+      preKeyId: b.preKeyId,
+      fingerprint: pendingContact.fingerprint,
+      identitySigningPublicKey: b.identitySigningPublicKeySpkiB64,
+      preKeySignature: b.preKeySignatureB64,
+    });
+    onAddContact?.(contact);
+    localStorage.removeItem('pending_contact');
+    setPendingContact(null);
+    setParseError('');
+  };
+
+  const dismissPending = () => {
+    localStorage.removeItem('pending_contact');
+    setPendingContact(null);
+  };
+
+  const copyInvite = () => {
+    navigator.clipboard.writeText(myInvite);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (!isOpen) return null;
@@ -153,7 +168,7 @@ export function QRContactModal({
                   : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
             >
-              Share QR Code
+              Share Invite
             </button>
             <button
               onClick={() => setMode('scan')}
@@ -162,9 +177,16 @@ export function QRContactModal({
                   : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
             >
-              Scan QR Code
+              Import Invite
             </button>
           </div>
+
+          {parseError && (
+            <div className="mb-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3">
+              <ShieldAlert className="w-4 h-4 mt-0.5 text-destructive shrink-0" />
+              <p className="text-xs text-foreground">{parseError}</p>
+            </div>
+          )}
 
           {/* Generate Mode */}
           {mode === 'generate' && (
@@ -175,11 +197,11 @@ export function QRContactModal({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={qrImage || "/placeholder.svg"}
-                      alt="QR Code"
+                      alt="Invite QR Code"
                       className="w-64 h-64 rounded-lg border-2 border-primary p-2 bg-white"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Scan with another AnonChat client
+                      Your Identity Bundle — share out-of-band only
                     </p>
                   </div>
                 ) : (
@@ -192,7 +214,7 @@ export function QRContactModal({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-foreground">
-                    Contact ID
+                    Your Safety Number
                   </label>
                   <button
                     onClick={() => setShowIdentity(!showIdentity)}
@@ -214,28 +236,24 @@ export function QRContactModal({
                 <div className="flex gap-2">
                   <input
                     type={showIdentity ? 'text' : 'password'}
-                    value={sessionId}
+                    value={myFingerprint}
                     readOnly
                     className="flex-1 bg-input border border-border rounded-lg px-3 py-2 text-foreground text-sm font-mono text-xs"
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={copySessionId}
-                  >
+                  <Button variant="outline" size="sm" onClick={copyInvite}>
                     <Copy className="w-4 h-4 mr-2" />
-                    {copied ? 'Copied' : 'Copy'}
+                    {copied ? 'Copied' : 'Copy Invite'}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" />
+                  Compare this Safety Number out-of-band with your Contact to prevent impostors.
+                </p>
               </div>
 
-              <Button
-                variant="outline"
-                onClick={generateNewQR}
-                className="w-full"
-              >
+              <Button variant="outline" onClick={generateMyInvite} className="w-full">
                 <RefreshCw className="w-4 h-4 mr-2" />
-                Generate New QR
+                Refresh QR
               </Button>
             </div>
           )}
@@ -246,44 +264,27 @@ export function QRContactModal({
               {pendingContact ? (
                 <div className="space-y-4">
                   <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
-                    <h3 className="text-sm font-semibold text-success mb-2">Contact Found!</h3>
+                    <h3 className="text-sm font-semibold text-success mb-2 flex items-center gap-1">
+                      <ShieldCheck className="w-4 h-4" />
+                      Invite verified
+                    </h3>
                     <p className="text-xs text-muted-foreground mb-3">
-                      A contact QR code was scanned and is ready to add.
+                      The Identity Bundle&apos;s Pre-Key signature checks out. Compare the Safety
+                      Number out-of-band before trusting this Contact.
                     </p>
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Contact ID:</span>
-                        <span className="font-mono text-foreground">{pendingContact.id.slice(-8)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Scanned:</span>
-                        <span className="text-foreground">{new Date(pendingContact.timestamp).toLocaleString()}</span>
+                        <span className="text-muted-foreground">Safety Number:</span>
+                        <span className="font-mono text-foreground">{pendingContact.fingerprint.slice(0, 29)}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex gap-2">
-                    <Button
-                      onClick={() => {
-                        if (onAddContact) {
-                          onAddContact(pendingContact);
-                        }
-                        localStorage.removeItem('pending_contact');
-                        setPendingContact(null);
-                        setScannedData('Contact added successfully');
-                      }}
-                      className="flex-1"
-                    >
+                    <Button onClick={confirmPending} className="flex-1">
                       Add Contact
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        localStorage.removeItem('pending_contact');
-                        setPendingContact(null);
-                      }}
-                      className="flex-1"
-                    >
+                    <Button variant="outline" onClick={dismissPending} className="flex-1">
                       Dismiss
                     </Button>
                   </div>
@@ -292,13 +293,13 @@ export function QRContactModal({
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground">
-                      How to add a contact
+                      How to add a Contact
                     </label>
                     <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>Ask your contact to share their QR code</li>
-                      <li>Scan it with your phone camera (opens this page)</li>
-                      <li>Or paste their contact data manually</li>
-                      <li>Your conversation will be automatically encrypted</li>
+                      <li>Ask your Contact to share their Invite (QR or copied string)</li>
+                      <li>Paste it below or upload it as a file</li>
+                      <li>The Identity Bundle is validated before the Contact is added</li>
+                      <li>Compare Safety Numbers out-of-band to prevent impostors</li>
                     </ol>
                   </div>
 
@@ -322,40 +323,24 @@ export function QRContactModal({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="text/*,.json"
-                    onChange={handleFileUpload}
+                    accept="text/plain,.txt"
                     className="hidden"
+                    onChange={handleFileUpload}
                   />
-
-                  {parseError && (
-                    <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                      <p className="text-xs text-destructive">{parseError}</p>
-                    </div>
-                  )}
-
-                  {scannedData && (
-                    <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
-                      <p className="text-xs text-success">{scannedData}</p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
           )}
-
-          {/* Actions */}
-          <div className="flex gap-2 mt-6">
-            <Button variant="outline" onClick={onClose} className="flex-1">
-              {scannedData ? 'Continue' : 'Cancel'}
-            </Button>
-            {mode === 'generate' && (
-              <Button onClick={onClose} className="flex-1">
-                Done
-              </Button>
-            )}
-          </div>
         </div>
       </Card>
     </div>
   );
+}
+
+/** Parse + cryptographically validate an invite string into a staged pending Contact. */
+async function buildPending(invite: string): Promise<PendingInvite> {
+  const bundle = parseInvite(invite);
+  await validateBundle(bundle);
+  const fingerprint = await identityService.generateFingerprint(bundle.identityPublicKeySpkiB64);
+  return { invite, bundle, fingerprint };
 }
