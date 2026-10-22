@@ -4,7 +4,7 @@ Spec: issue #31. Tickets: #32–#42 (native blocking edges). ADRs: 0011 (design-
 | # | Ticket | Issue | Status | Review | Commit |
 |---|---|---|---|---|---|
 | 01 | CI gates v1 | #32 | ✅ implemented | 0 hard · workflow (test/tsc/lint/build) + fresh ESLint (no-console warn w/ relay allowlist, no-explicit-any warn); one real lint error fixed (unescaped entity) | see git |
-| 02 | Dead-code detector | #33 | ready | | |
+| 02 | Dead-code detector | #33 | ✅ implemented | knip sandboxed (oxc 1GB alloc fail) → `tools/find-dead.ts` local detector + knip.json for CI; baseline: 56 dead files (45 kit + 11 feature/lib incl. lib/crypto,t/api-client,index,t/transport/transport-adapter,t/tor-bridge,t/unread-badge, hooks/use-mobile,use-toast, encryption-status-bar, message-bubble, electron/config.cjs) + 32 dead deps — all grep-verified; artifact `.scratch/cleanup/knip-baseline.{md,json}` | see git |
 | 03 | Deletion batch 1 (kit components + deps) | #34 | blocked by #32,#33 | | |
 | 04 | Deletion batch 2 (feature dead + styles) | #35 | blocked by #34 | | |
 | 05 | CSS nuke + token rebuild | #36 | blocked by #35 | | |
