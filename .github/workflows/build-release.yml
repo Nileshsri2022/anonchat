@@ -71,6 +71,9 @@ jobs:
         if: matrix.platform == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
 
+      - name: Download Tor daemon
+        run: bun run download:tor
+
       - name: Build Electron
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
