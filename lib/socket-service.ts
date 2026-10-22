@@ -41,6 +41,13 @@ class SocketService {
             // Listen for incoming messages
             this.socket.on('message', (message: any) => {
                 console.log('💬 Received message via WebSocket');
+                // A '*' handler receives every room's messages (used by the DM client,
+                // which routes envelopes by their Pairwise Channel itself).
+                const globalHandler = this.messageHandlers.get('*');
+                if (globalHandler) {
+                    globalHandler(message);
+                    return;
+                }
                 if (this.currentRoom) {
                     const handler = this.messageHandlers.get(this.currentRoom);
                     if (handler) {

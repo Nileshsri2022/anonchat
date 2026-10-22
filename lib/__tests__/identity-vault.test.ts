@@ -121,3 +121,40 @@ describe('IdentityVault', () => {
     expect(await IdentityVault.load({ store })).toBeNull();
   });
 });
+
+describe('IdentityVault — key material access', () => {
+  test('provides usable ECDH identity and pre-key pairs (imported from persisted JWKs)', async () => {
+    const { generateEphemeralKeys } = await import('../crypto');
+    const store = new MemoryKVStore();
+    const vault = await IdentityVault.create({ store, iterations: 1000 });
+
+    const identity = await vault.getIdentityKeyPair();
+    expect(identity.publicKey).toBeDefined();
+    expect(identity.privateKey).toBeDefined();
+
+    const preKey = await vault.getPreKeyPair();
+    expect(preKey.id).toBeGreaterThan(0);
+
+    // The identity private key can actually perform ECDH with a remote public key
+    const remote = await generateEphemeralKeys();
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: remote.publicKey },
+      identity.privateKey,
+      256,
+    );
+    expect(bits.byteLength).toBe(32);
+  });
+
+  test('a reloaded vault yields the same public keys (stable identity across reloads)', async () => {
+    const store = new MemoryKVStore();
+    const created = await IdentityVault.create({ store, iterations: 1000 });
+    const before = await created.getIdentityKeyPair();
+    const beforeSpki = await crypto.subtle.exportKey('spki', before.publicKey);
+
+    const reloaded = (await IdentityVault.load({ store }))!;
+    const after = await reloaded.getIdentityKeyPair();
+    const afterSpki = await crypto.subtle.exportKey('spki', after.publicKey);
+
+    expect(Buffer.from(beforeSpki).equals(Buffer.from(afterSpki))).toBe(true);
+  });
+});

@@ -111,9 +111,9 @@ class RelayAPI {
     return { messageId: data.messageId, sentFrom: data.sentFrom };
   }
 
-  async pollMessages(roomId: string, since?: string): Promise<RelayMessage[]> {
-    const url = since
-      ? `${this.baseUrl}/rooms/${roomId}/messages?since=${since}`
+  async pollMessages(roomId: string, after?: string): Promise<RelayMessage[]> {
+    const url = after
+      ? `${this.baseUrl}/rooms/${roomId}/messages?after=${encodeURIComponent(after)}`
       : `${this.baseUrl}/rooms/${roomId}/messages`;
 
     const response = await fetch(url);
@@ -123,7 +123,8 @@ class RelayAPI {
     }
 
     const data = await response.json();
-    return data.messages || [];
+    // The relay returns a bare array of messages.
+    return Array.isArray(data) ? data : data.messages || [];
   }
 
   startPolling(

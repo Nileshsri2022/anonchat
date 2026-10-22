@@ -246,6 +246,66 @@ export class IdentityVault {
     throw new Error('No identity data available');
   }
 
+  /** The long-term identity key pair as usable CryptoKeys. */
+  async getIdentityKeyPair(): Promise<{ publicKey: CryptoKey; privateKey: CryptoKey }> {
+    const data = await this.getIdentityData();
+    const publicKey = await crypto.subtle.importKey(
+      'spki',
+      base64ToBytes(data.identity.publicKeySpkiB64),
+      { name: 'ECDH', namedCurve: 'P-256' },
+      true,
+      [],
+    );
+    const privateKey = await crypto.subtle.importKey(
+      'jwk',
+      data.identity.privateKeyJwk,
+      { name: 'ECDH', namedCurve: 'P-256' },
+      true,
+      ['deriveBits'],
+    );
+    return { publicKey, privateKey };
+  }
+
+  /** The signed Pre-Key pair as usable CryptoKeys (responder-side X3DH). */
+  async getPreKeyPair(): Promise<{ id: number; publicKey: CryptoKey; privateKey: CryptoKey }> {
+    const data = await this.getIdentityData();
+    const publicKey = await crypto.subtle.importKey(
+      'spki',
+      base64ToBytes(data.signedPreKey.publicKeySpkiB64),
+      { name: 'ECDH', namedCurve: 'P-256' },
+      true,
+      [],
+    );
+    const privateKey = await crypto.subtle.importKey(
+      'jwk',
+      data.signedPreKey.privateKeyJwk,
+      { name: 'ECDH', namedCurve: 'P-256' },
+      true,
+      ['deriveBits'],
+    );
+    return { id: data.signedPreKey.id, publicKey, privateKey };
+  }
+
+  /** The signing key pair (ECDSA) as usable CryptoKeys. */
+  async getSigningKeyPair(): Promise<{ publicKey: CryptoKey; privateKey: CryptoKey }> {
+    const data = await this.getIdentityData();
+    const publicKey = await crypto.subtle.importKey(
+      'spki',
+      base64ToBytes(data.signing.publicKeySpkiB64),
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['verify'],
+    );
+    const privateKey = await crypto.subtle.importKey(
+      'jwk',
+      data.signing.privateKeyJwk,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign'],
+    );
+    return { publicKey, privateKey };
+  }
+
   /** Destroy the stored identity entirely (local data only). */
   async destroy(): Promise<void> {
     await this.store.delete(VAULT_RECORD_KEY);
