@@ -18,4 +18,4 @@ Spec: issue #31. Tickets: #32–#42 (native blocking edges). ADRs: 0011 (design-
 Notes: node_modules is not persisted between sessions in this sandbox — reinstall with
 `npm install --ignore-scripts && node node_modules/bun/install.js` before running gates.
 
-WAVE COMPLETE — cleanup (2026-10-22): all 11 tickets #32–#42 implemented on this branch; wave-end PR carries `Closes #32` … `Closes #42` in the body (commit-message keywords do not fire — proven wave 2). Spec issue #31 stays open (never touched).
+WAVE COMPLETE — cleanup (2026-10-22): all 11 tickets #32–#42 implemented; wave-end PR = #43 (Closes #32 … #42 in body; #31 untouched). Final: 93 tests / 423 expects, tsc clean, lint 0 warn/0 err, dead-code gate clean (95 reachable), offline build green. Merge closes all eleven.
