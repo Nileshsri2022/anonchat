@@ -30,11 +30,11 @@ export interface DoubleRatchetState {
 export async function generateIdentityKeys(): Promise<IdentityKeys> {
   const keyPair = await crypto.subtle.generateKey(
     {
-      name: 'ECDSA',
+      name: 'ECDH',
       namedCurve: 'P-256'
     },
     true,
-    ['sign', 'verify']
+    ['deriveBits']
   );
   return { publicKey: keyPair.publicKey, privateKey: keyPair.privateKey };
 }

@@ -218,7 +218,7 @@ export function ContactList({ onStartChat }: ContactListProps) {
                           Verify
                         </Button>
                       )}
-                      {contact.verified && onStartChat && (
+                      {onStartChat && (
                         <Button
                           size="sm"
                           className="flex-1"
