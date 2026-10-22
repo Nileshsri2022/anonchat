@@ -19,7 +19,7 @@ const seenMessages = new Map<string, number>(); // msgId -> expiryTimestamp
 const REPLAY_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 // Default disappearing message TTL options (in milliseconds)
-export const MESSAGE_TTL_OPTIONS = {
+const MESSAGE_TTL_OPTIONS = {
   OFF: 0,
   '30_SECONDS': 30 * 1000,
   '5_MINUTES': 5 * 60 * 1000,
