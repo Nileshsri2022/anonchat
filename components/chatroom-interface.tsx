@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Shield, Info, Users, Send, Copy, Check, QrCode, Timer } from 'lucide-react';
+import { Shield, Info, Users, Send, Copy, Check, QrCode, Timer, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useChatroom } from '@/hooks/use-chatroom';
 import { QRContactModal } from '@/components/qr-contact-modal';
@@ -13,17 +13,19 @@ import { TorStatusIndicator } from '@/components/tor-status-indicator';
 interface ChatroomInterfaceProps {
   roomId: string;
   roomName: string;
+  isProtected?: boolean;
+  passphrase?: string;
   onOpenInfo: () => void;
   onLeaveRoom: () => void;
 }
 
-export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }: ChatroomInterfaceProps) {
+export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, onOpenInfo, onLeaveRoom }: ChatroomInterfaceProps) {
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, users, currentUser, isConnected, sendMessage, messageTTL, setMessageTTL } = useChatroom(roomId, roomName);
+  const { messages, users, currentUser, isConnected, sendMessage, messageTTL, setMessageTTL } = useChatroom(roomId, roomName, passphrase);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -56,7 +58,14 @@ export function ChatroomInterface({ roomId, roomName, onOpenInfo, onLeaveRoom }:
             <Users className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h2 className="font-semibold text-foreground">{roomName}</h2>
+            <div className="flex items-center gap-1.5">
+              <h2 className="font-semibold text-foreground">{roomName}</h2>
+              {isProtected && (
+                <span title="Room Passphrase Protected">
+                  <Lock className="w-3.5 h-3.5 text-yellow-500" />
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{users.filter(u => u.online).length} online</span>
               <span>•</span>

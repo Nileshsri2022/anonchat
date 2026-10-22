@@ -1,18 +1,20 @@
 'use client';
 
-import { memo, useCallback } from 'react';
+import { memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, Shield, Plus, Settings, UsersRound } from 'lucide-react';
+import { Users, Shield, Plus, Settings, UsersRound, Lock } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ThemeToggle } from '@/components/theme-toggle';
 
-interface Room {
+export interface Room {
   id: string;
   name: string;
   userCount: number;
   lastActivity: Date;
   encrypted: boolean;
+  isProtected?: boolean;
+  passphrase?: string;
 }
 
 interface RoomListProps {
@@ -78,8 +80,15 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
                   }`}
               >
                 <div className="flex items-start justify-between mb-1">
-                  <span className="font-semibold text-sm">{room.name}</span>
-                  {room.encrypted && <Shield className="w-3 h-3 text-primary" />}
+                  <div className="flex items-center gap-1.5 font-semibold text-sm">
+                    {room.isProtected && (
+                      <span title="Room Passphrase Protected" className="flex items-center">
+                        <Lock className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
+                      </span>
+                    )}
+                    <span className="truncate">{room.name}</span>
+                  </div>
+                  {room.encrypted && <Shield className="w-3 h-3 text-primary flex-shrink-0" />}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
@@ -89,10 +98,15 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
                   <span>•</span>
                   <span>{room.lastActivity.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 flex items-center gap-1.5">
                   <Badge variant="secondary" className="text-xs">
                     ID: {room.id.slice(0, 8)}...
                   </Badge>
+                  {room.isProtected && (
+                    <Badge variant="outline" className="text-[10px] text-yellow-500 border-yellow-500/30 bg-yellow-500/10">
+                      Protected
+                    </Badge>
+                  )}
                 </div>
               </button>
             ))

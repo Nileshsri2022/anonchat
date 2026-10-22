@@ -1,6 +1,7 @@
-// API route for joining chatrooms (mock relay for development)
+// API route for joining chatrooms
 import { NextRequest, NextResponse } from 'next/server';
 import { getTorIP, generateAnonymousId } from '@/lib/tor-integration';
+import { roomRegistry } from '@/lib/room-registry';
 
 // In-memory storage for development (replace with Redis in production)
 const roomUsers = new Map<string, Set<any>>();
@@ -14,41 +15,47 @@ export async function POST(
     const body = await request.json();
     const { userId, username, timestamp } = body;
 
-
-    // Get anonymous IP through SOCKS proxy
     const anonIP = await getTorIP();
-
-    // Generate anonymous ID if not provided
     const anonId = userId || generateAnonymousId();
 
-    console.log(`🚪 [TOR CIRCUIT] User ${anonId.slice(-6)} joined room ${roomId.slice(-6)} with new circuit IP: ${anonIP}`);
+    // Check room security metadata in registry
+    const metadata = roomRegistry.getRoom(roomId);
 
-    // Initialize room if it doesn't exist
+    console.log(`🚪 [TOR CIRCUIT] User ${anonId.slice(-6)} joined room ${roomId.slice(-6)} (Protected: ${metadata?.isProtected || false}) IP: ${anonIP}`);
+
     if (!roomUsers.has(roomId)) {
       roomUsers.set(roomId, new Set());
     }
 
-    // Add user to room with anonymous data
     const room = roomUsers.get(roomId)!;
     room.add({
       userId: anonId,
       username: username || `User ${anonId.slice(-4)}`,
       ip: anonIP,
-      joinedAt: timestamp
+      joinedAt: timestamp,
     });
+
+    // Update count in registry
+    roomRegistry.updateUserCount(roomId, room.size);
 
     return NextResponse.json({
       success: true,
       userId: anonId,
       userIP: anonIP,
       userCount: room.size,
-      message: 'Joined room anonymously'
+      isProtected: Boolean(metadata?.isProtected),
+      canary: metadata?.canary,
+      name: metadata?.name,
+      message: 'Joined room anonymously',
     });
   } catch (error) {
     console.error('[Relay] Error joining room:', error);
-    return NextResponse.json({
-      error: 'Failed to join room anonymously',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Failed to join room anonymously',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    );
   }
 }

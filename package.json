@@ -12,6 +12,8 @@
     "build": "next build",
     "dev": "bun run server.js",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "start": "bun run server.js",
     "electron": "electron .",
     "electron-dev": "concurrently \"cross-env BROWSER=none bun run server.js\" \"wait-on http://localhost:3000 && electron .\"",
@@ -142,6 +144,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.3",
     "@types/better-sqlite3": "^7.6.12",
+    "@types/bun": "^1.4.3",
     "@types/node": "^22.13.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.12",

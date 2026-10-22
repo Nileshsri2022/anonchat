@@ -16,7 +16,7 @@ export function useMessaging(options: UseMessagingOptions) {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const clientRef = useRef<RelayApiClient | null>(null);
-  const pollingRef = useRef<NodeJS.Timer | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Initialize API client
   useEffect(() => {

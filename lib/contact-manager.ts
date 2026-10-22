@@ -105,7 +105,7 @@ export class ContactManager {
   private generateVerificationCode(): string {
     // Generate 6-digit numeric code (1,000,000 possible combinations)
     const randomBytes = crypto.getRandomValues(new Uint8Array(4));
-    const randomNumber = (randomBytes[0] << 24) | (randomBytes[1] << 16) | (randomBytes[2] << 8) | randomBytes[3];
+    const randomNumber = new DataView(randomBytes.buffer).getUint32(0);
     return (randomNumber % 1000000).toString().padStart(6, '0');
   }
 }
