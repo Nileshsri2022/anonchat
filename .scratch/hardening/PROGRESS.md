@@ -9,8 +9,8 @@ so per-ticket status lives here until it can be mirrored into the final PR.
 | 01 Identity Vault | #3 | ✅ implemented | Standards 0 hard/2 judgement · Spec 5/5 | 139e1b7 |
 | 02 Contact exchange | #4 | ✅ implemented | Standards 0 hard · Spec 4/4 ACs | 93e4f3e |
 | 03 DM protocol core | #5 | ✅ implemented | Standards 0 hard/2 judgement (base64 helpers dup → #11) · Spec 7/7 ACs | de633ff |
-| 04 DMs live | #6 | in progress | | |
-| 05 Room Keys + Invites | #7 | blocked by #4 | | |
+| 04 DMs live | #6 | ✅ implemented | Standards 0 hard · Spec 4/4 ACs (+2 integration bugs found & fixed) | 1956913 |
+| 05 Room Keys + Invites | #7 | in progress | | |
 | 06 Encrypted history | #8 | blocked by #3 (now unblocked) | | |
 | 07 Relay hardening | #9 | pending | | |
 | 08 Privacy/build | #10 | pending | | |

@@ -38,7 +38,7 @@ const USER_COLORS = [
   'text-indigo-400',
 ];
 
-export function useChatroom(roomId: string, roomName: string, passphrase?: string) {
+export function useChatroom(roomId: string, roomName: string, passphrase?: string, roomKeyB64?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<RoomUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -55,8 +55,13 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
   useEffect(() => {
     const initRoom = async () => {
       try {
-        // Derive room key
-        await roomEncryption.deriveKeyFromPassphrase(roomId, passphrase);
+        // Room key: random-key Rooms import their Invite-carried key (ADR-0003);
+        // passphrase Rooms derive from the Room Passphrase.
+        if (roomKeyB64) {
+          await roomEncryption.importRoomKey(roomKeyB64);
+        } else {
+          await roomEncryption.deriveKeyFromPassphrase(roomId, passphrase ?? '');
+        }
 
         // Join room
         const joinResult = await relayAPI.joinRoom(roomId, currentUser.id, currentUser.username);

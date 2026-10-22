@@ -18,12 +18,14 @@ describe('RoomEncryption', () => {
     expect(decrypted).toBe(message);
   });
 
-  test('derives identical room keys from roomId and shared secret', async () => {
+  test('members holding the same imported Room Key exchange messages (ADR-0003)', async () => {
     const userA = new RoomEncryption();
     const userB = new RoomEncryption();
 
-    await userA.deriveRoomKey('room-alpha-99', 'shared-passphrase');
-    await userB.deriveRoomKey('room-alpha-99', 'shared-passphrase');
+    const { createRoomKey } = await import('../room-invite');
+    const keyB64 = await createRoomKey();
+    await userA.importRoomKey(keyB64);
+    await userB.importRoomKey(keyB64);
 
     const original = 'Secret room text over Tor';
     const encrypted = await userA.encrypt(original);
@@ -36,12 +38,19 @@ describe('RoomEncryption', () => {
     const userA = new RoomEncryption();
     const userB = new RoomEncryption();
 
-    await userA.deriveRoomKey('room-alpha-99', 'correct-password');
-    await userB.deriveRoomKey('room-alpha-99', 'wrong-password');
+    await userA.deriveKeyFromPassphrase('room-alpha-99', 'correct-password');
+    await userB.deriveKeyFromPassphrase('room-alpha-99', 'wrong-password');
 
     const encrypted = await userA.encrypt('Secret payload');
 
-    expect(userB.decrypt(encrypted)).rejects.toThrow();
+    await expect(userB.decrypt(encrypted)).rejects.toThrow();
+  });
+
+  test('the ID-derivable public-room key path no longer exists (ADR-0003)', async () => {
+    const room = new RoomEncryption();
+    expect((room as unknown as { deriveRoomKey?: unknown }).deriveRoomKey).toBeUndefined();
+    await expect(room.deriveKeyFromPassphrase('room-solo', '')).rejects.toThrow(/Passphrase/i);
+    await expect(room.deriveKeyFromPassphrase('room-solo', undefined as unknown as string)).rejects.toThrow(/Passphrase/i);
   });
 });
 
@@ -82,17 +91,9 @@ describe('RoomEncryption - Ticket 01: PBKDF2 & Room Canary', () => {
     expect(isInvalid).toBe(false);
   });
 
-  test('falls back to public room key when passphrase is empty or undefined', async () => {
-    const userA = new RoomEncryption();
-    const userB = new RoomEncryption();
-
-    await userA.deriveKeyFromPassphrase('public-room-101');
-    await userB.deriveRoomKey('public-room-101', 'shared-secret');
-
-    const message = 'Public broadcast';
-    const encrypted = await userA.encrypt(message);
-    const decrypted = await userB.decrypt(encrypted);
-
-    expect(decrypted).toBe(message);
+  test('no passphrase fallback exists: empty passphrases are rejected (ADR-0003)', async () => {
+    const room = new RoomEncryption();
+    await expect(room.deriveKeyFromPassphrase('public-room-101', '')).rejects.toThrow();
+    await expect(room.deriveKeyFromPassphrase('public-room-101', undefined as unknown as string)).rejects.toThrow();
   });
 });

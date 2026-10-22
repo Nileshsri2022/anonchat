@@ -40,6 +40,7 @@ interface Room {
   encrypted: boolean;
   isProtected?: boolean;
   passphrase?: string;
+  roomKeyB64?: string;
 }
 
 export default function Home() {
@@ -104,7 +105,7 @@ export default function Home() {
     setShowRoomJoin(true);
   }, []);
 
-  const handleJoinRoom = useCallback((roomId: string, roomName: string, isNewRoom: boolean, isProtected?: boolean, passphrase?: string) => {
+  const handleJoinRoom = useCallback((roomId: string, roomName: string, isNewRoom: boolean, isProtected?: boolean, passphrase?: string, roomKeyB64?: string) => {
     setRooms(prev => {
       const existingRoom = prev.find(r => r.id === roomId);
       if (!existingRoom) {
@@ -116,10 +117,11 @@ export default function Home() {
           encrypted: true,
           isProtected: Boolean(isProtected),
           passphrase,
+          roomKeyB64,
         };
         return [...prev, newRoom];
-      } else if (passphrase && !existingRoom.passphrase) {
-        return prev.map(r => r.id === roomId ? { ...r, passphrase, isProtected: true } : r);
+      } else if ((passphrase || roomKeyB64) && (!existingRoom.passphrase && !existingRoom.roomKeyB64)) {
+        return prev.map(r => r.id === roomId ? { ...r, passphrase, roomKeyB64, isProtected: Boolean(isProtected) } : r);
       }
       return prev;
     });
@@ -251,6 +253,7 @@ export default function Home() {
             roomName={selectedRoomData.name}
             isProtected={selectedRoomData.isProtected}
             passphrase={selectedRoomData.passphrase}
+            roomKeyB64={selectedRoomData.roomKeyB64}
             onOpenInfo={() => setShowInfoPanel(!showInfoPanel)}
             onLeaveRoom={handleLeaveRoom}
           />
