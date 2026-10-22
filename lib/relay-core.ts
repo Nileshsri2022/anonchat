@@ -32,6 +32,29 @@ export interface RelayCoreOptions {
   pollRatePerSec?: number;
   joinRatePerSec?: number;
   replayWindowMs?: number;
+  /** Max blob size in bytes (default 10 MiB). */
+  maxBlobBytes?: number;
+  /** Blob uploads per minute per client (default 10). */
+  blobUploadsPerMin?: number;
+  /** Burst allowance for blob uploads (default = blobUploadsPerMin). */
+  blobBurst?: number;
+  /** Blob time-to-live in ms (default 7 days). */
+  blobTtlMs?: number;
+}
+
+export type PutBlobResult =
+  | { accepted: true; blobId: string }
+  | { accepted: false; reason: string };
+
+export interface FetchedBlob {
+  data: Uint8Array<ArrayBuffer>;
+}
+
+interface StoredBlob {
+  data: Uint8Array<ArrayBuffer>;
+  createdAt: number;
+  expiresAt: number;
+  payloadHash: string;
 }
 
 interface StoredMessage extends RelayMessage {
@@ -81,6 +104,11 @@ export class RelayCore {
   private messages = new Map<string, StoredMessage[]>();
   private seqCounters = new Map<string, number>();
   private seenPayloads = new Map<string, number>(); // payloadHash -> expiry
+  private readonly blobs = new Map<string, StoredBlob>();
+  private readonly maxBlobBytes: number;
+  private readonly blobUploadsPerMin: number;
+  private readonly blobBurst: number;
+  private readonly blobTtlMs: number;
   private buckets = new Map<string, TokenBucket>();
   private nextSeq = 1;
 
@@ -89,25 +117,38 @@ export class RelayCore {
     this.sendRatePerSec = options.sendRatePerSec ?? 10;
     this.burstSize = options.burstSize ?? 20;
     this.pollRatePerSec = options.pollRatePerSec ?? 60;
+    this.maxBlobBytes = options.maxBlobBytes ?? 10 * 1024 * 1024;
+    this.blobUploadsPerMin = options.blobUploadsPerMin ?? 10;
+    this.blobBurst = options.blobBurst ?? (options.blobUploadsPerMin ?? 10);
+    this.blobTtlMs = options.blobTtlMs ?? 7 * 24 * 60 * 60 * 1000;
     this.joinRatePerSec = options.joinRatePerSec ?? 5;
     this.replayWindowMs = options.replayWindowMs ?? 3 * 24 * 60 * 60 * 1000;
   }
 
   // --- Anti-abuse ------------------------------------------------------------
 
-  private bucketFor(clientKey: string, kind: 'send' | 'poll' | 'join'): TokenBucket {
+  private bucketFor(clientKey: string, kind: 'send' | 'poll' | 'join' | 'blob'): TokenBucket {
     const key = `${kind}:${clientKey}`;
     let bucket = this.buckets.get(key);
     if (!bucket) {
       const rate =
-        kind === 'send' ? this.sendRatePerSec : kind === 'poll' ? this.pollRatePerSec : this.joinRatePerSec;
-      bucket = new TokenBucket(rate, kind === 'send' ? this.burstSize : Math.max(5, rate));
+        kind === 'send'
+          ? this.sendRatePerSec
+          : kind === 'poll'
+            ? this.pollRatePerSec
+            : kind === 'blob'
+              ? this.blobUploadsPerMin / 60
+              : this.joinRatePerSec;
+      bucket = new TokenBucket(
+        rate,
+        kind === 'send' ? this.burstSize : kind === 'blob' ? this.blobBurst : Math.max(5, rate),
+      );
       this.buckets.set(key, bucket);
     }
     return bucket;
   }
 
-  allowRequest(clientKey: string, kind: 'send' | 'poll' | 'join'): boolean {
+  allowRequest(clientKey: string, kind: 'send' | 'poll' | 'join' | 'blob'): boolean {
     return this.bucketFor(clientKey, kind).tryTake();
   }
 
@@ -218,6 +259,45 @@ export class RelayCore {
   }
 
   /** Removes expired messages and stale replay windows. Returns removed count. */
+  /**
+   * Store an opaque encrypted blob (ADR-0009). The Relay never inspects or
+   * attributes the payload; records hold only data, timestamps, and a hash.
+   */
+  async putBlob(input: { data: Uint8Array; clientKey: string }): Promise<PutBlobResult> {
+    if (input.data.byteLength > this.maxBlobBytes) {
+      return { accepted: false, reason: `blob exceeds ${this.maxBlobBytes} byte cap` };
+    }
+    if (!this.allowRequest(input.clientKey, 'blob')) {
+      return { accepted: false, reason: 'blob upload rate limit exceeded' };
+    }
+    const blobId = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    const now = Date.now();
+    this.blobs.set(blobId, {
+      data: (() => {
+        const out = new Uint8Array(new ArrayBuffer(input.data.byteLength));
+        out.set(input.data);
+        return out;
+      })(),
+      createdAt: now,
+      expiresAt: now + this.blobTtlMs,
+      payloadHash: await sha256Hex(String(input.data.byteLength)),
+    });
+    return { accepted: true, blobId };
+  }
+
+  /** Fetch a blob by id; expired or unknown blobs are indistinguishable (null). */
+  async getBlob(blobId: string): Promise<FetchedBlob | null> {
+    const blob = this.blobs.get(blobId);
+    if (!blob) return null;
+    if (blob.expiresAt <= Date.now()) {
+      this.blobs.delete(blobId);
+      return null;
+    }
+    return { data: blob.data };
+  }
+
   sweepExpired(): number {
     const now = Date.now();
     let removed = 0;
@@ -233,6 +313,12 @@ export class RelayCore {
     }
     for (const [hash, expiry] of this.seenPayloads) {
       if (expiry <= now) this.seenPayloads.delete(hash);
+    }
+    for (const [blobId, blob] of this.blobs) {
+      if (blob.expiresAt <= now) {
+        this.blobs.delete(blobId);
+        removed++;
+      }
     }
     return removed;
   }

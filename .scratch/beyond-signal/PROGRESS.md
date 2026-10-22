@@ -3,11 +3,11 @@ Spec: issue #14. Tickets: #15–#26 (native blocking edges). Process: per-ticket
 
 | # | Ticket | Issue | Status | Review | Commit |
 |---|---|---|---|---|---|
-| 01 | PQ hybrid handshake | #15 | ✅ implemented | Standards 0 hard · S1 3 tests + S3 2 tests; tamper/fail-closed covered |  |
+| 01 | PQ hybrid handshake | #15 | ✅ implemented | 0 hard · 2 review findings fixed (use-time PQ sig verify; unsigned key fail-closed) | e342af0+ac48fed+9d10888 |
 | 02 | Sealed sender v3 | #16 | blocked by #15 | | |
 | 03 | Sender-key lib | #17 | blocked by #15 | | |
 | 04 | Room rewire | #18 | blocked by #17 | | |
-| 05 | Relay blob store | #19 | ready | | |
+| 05 | Relay blob store | #19 | ✅ implemented | 0 hard · result-pattern matched postMessage contract; 6 S2 tests (round-trip, 413, 429, TTL, 404, no-metadata) | see git |
 | 06 | Attachments + voice | #20 | blocked by #16,#19 | | |
 | 07 | Typing + receipts | #21 | blocked by #16 | | |
 | 08 | Names + badges | #22 | blocked by #15,#18 | | |
