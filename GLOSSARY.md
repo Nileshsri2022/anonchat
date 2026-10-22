@@ -115,3 +115,15 @@ _Avoid_: Draft folder, send queue, pending tray
 **Display Name**:
 An optional, self-chosen label a client publishes in its Identity Bundle and Intro Messages; never required, never looked up, anonymity stays the default.
 _Avoid_: Username, profile name, handle
+
+**Design Tokens**:
+The single fresh variables file (palette, light+dark, spacing scale) every surface styles through after the rebuild; there is no second stylesheet.
+_Avoid_: theme file, CSS vars dump, globals copy
+
+**Live Surface**:
+The screens a user actually reaches (rooms/chat, DM, contacts, modals, settings); only these get primitives and styling effort.
+_Avoid_: page inventory, all screens, UI scope
+
+**Provably-Dead**:
+A file, dependency, or export with zero inbound references proven by the automated import-graph detector; only provably-dead code is deleted.
+_Avoid_: probably unused, looks dead, legacy
