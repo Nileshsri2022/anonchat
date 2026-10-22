@@ -41,7 +41,7 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
     <div className="flex-1 flex flex-col min-h-0">
       <div className="pl-4 pr-12 pt-4 pb-3 border-b border-border">
         <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
-          <h2 className="font-semibold text-lg text-foreground">Chatrooms</h2>
+          <h2 className="font-semibold text-base text-foreground">AnonChat</h2>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             {onOpenSettings && (
@@ -88,8 +88,12 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
                 className={`w-full p-3 rounded-lg text-left transition-colors border-l-2 ${selectedId === room.id
                   ? 'bg-primary/5 border-primary'
                   : 'hover:bg-muted/60 border-transparent'
-                  }`}
-              >
+                  }`}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                      <Users className="w-4 h-4 text-secondary-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex items-center gap-1.5 font-semibold text-sm">
                     {room.isProtected && (
@@ -119,6 +123,8 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
                     </Badge>
                   )}
                 </div>
+                  </div>
+                  </div>
               </button>
             ))
           )}

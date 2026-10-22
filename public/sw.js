@@ -2,7 +2,8 @@
 // Caches the application shell for instant/offline opens. ALL /api traffic
 // is network-only — the relay is never served from cache, so message data
 // is always live and never persisted by the worker.
-const SHELL_CACHE = 'anonchat-shell-v1';
+// Bump on visual/static changes so cached clients pick up the new shell.
+const SHELL_CACHE = 'anonchat-shell-v2';
 const SHELL_ASSETS = ['/', '/manifest.json', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
