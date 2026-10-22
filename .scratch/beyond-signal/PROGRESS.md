@@ -11,7 +11,7 @@ Spec: issue #14. Tickets: #15–#26 (native blocking edges). Process: per-ticket
 | 06 | Attachments + voice | #20 | blocked by #16,#19 | | |
 | 07 | Typing + receipts | #21 | blocked by #16 | | |
 | 08 | Names + badges | #22 | blocked by #15,#18 | | |
-| 09 | PWA shell | #23 | ready | | |
+| 09 | PWA shell | #23 | ✅ implemented | 0 hard · manifest sanity + SW network-only-API asserted by test; badge lifecycle test | see git |
 | 10 | Encrypted outbox | #24 | blocked by #16,#23 | | |
 | 11 | Arch deepening | #25 | blocked by #18,#20 | | |
 | 12 | Golden E2E | #26 | blocked by #16–#25 | | |
