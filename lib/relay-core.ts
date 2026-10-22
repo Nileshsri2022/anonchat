@@ -68,6 +68,12 @@ async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
+function newBlobId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 class TokenBucket {
   private tokens: number;
   private last: number;
@@ -111,7 +117,7 @@ export class RelayCore {
   private buckets = new Map<string, TokenBucket>();
   private nextSeq = 1;
 
-  constructor(options: RelayCoreOptions) {
+  constructor(options: RelayCoreOptions = {}) {
     this.payloadCapBytes = options.payloadCapBytes ?? 64 * 1024;
     this.sendRatePerSec = options.sendRatePerSec ?? 10;
     this.burstSize = options.burstSize ?? 20;
@@ -259,20 +265,33 @@ export class RelayCore {
 
   /** Removes expired messages and stale replay windows. Returns removed count. */
   /**
+   * Reserve a blob id before upload: clients need the id to bind it into the
+   * attachment's AEAD additional data BEFORE encrypting, so one upload
+   * suffices (ADR-0009). Reservation counts against the same rate limit.
+   */
+  reserveBlobId(clientKey: string): { accepted: true; blobId: string } | { accepted: false; reason: string } {
+    if (!this.allowRequest(clientKey, 'blob')) {
+      return { accepted: false, reason: 'blob upload rate limit exceeded' };
+    }
+    const blobId = newBlobId();
+    const now = Date.now();
+    this.blobs.set(blobId, { data: new Uint8Array(new ArrayBuffer(0)), createdAt: now, expiresAt: now + this.blobTtlMs });
+    return { accepted: true, blobId };
+  }
+
+  /**
    * Store an opaque encrypted blob (ADR-0009). The Relay never inspects or
    * attributes the payload; records hold only the data and its timestamps —
    * ids are already unguessable, so no content hash is kept.
    */
-  putBlob(input: { data: Uint8Array; clientKey: string }): PutBlobResult {
+  putBlob(input: { data: Uint8Array; clientKey: string; blobId?: string }): PutBlobResult {
     if (input.data.byteLength > this.maxBlobBytes) {
       return { accepted: false, reason: `blob exceeds ${this.maxBlobBytes} byte cap` };
     }
     if (!this.allowRequest(input.clientKey, 'blob')) {
       return { accepted: false, reason: 'blob upload rate limit exceeded' };
     }
-    const blobId = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
+    const blobId = input.blobId ?? newBlobId();
     const now = Date.now();
     this.blobs.set(blobId, {
       data: (() => {

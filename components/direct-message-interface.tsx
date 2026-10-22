@@ -6,7 +6,10 @@ import { useDirectMessage } from '@/hooks/use-direct-message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Shield, ShieldAlert, ArrowLeft, Send, Timer, Check, Copy, User } from 'lucide-react';
+import { Shield, ShieldAlert, ArrowLeft, Send, Timer, Check, Copy, User, Paperclip, Mic, Square, Download, FileText } from 'lucide-react';
+import { createAttachmentPayload, resolveAttachmentPayload } from '@/lib/blob-client';
+import { payloadToAttachment } from '@/lib/attachment-crypto';
+import type { AttachmentPayload } from '@/lib/attachment-crypto';
 import { TorCircuitDisplay } from '@/components/tor-circuit-display';
 import { TorStatusIndicator } from '@/components/tor-status-indicator';
 import { ContactVerificationModal } from '@/components/contact-verification-modal';
@@ -26,6 +29,71 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { messages, isConnected, sendMessage, isVerified, safetyNumber } = useDirectMessage(contact);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [busyAttachment, setBusyAttachment] = useState(false);
+
+  const sendAttachment = useCallback(
+    async (data: Uint8Array<ArrayBuffer>, meta: { name: string; mime: string; kind: 'file' | 'image' | 'voice'; durationMs?: number }) => {
+      setBusyAttachment(true);
+      try {
+        const payload = await createAttachmentPayload(data, meta);
+        await sendMessage(JSON.stringify(payload), ttlMs > 0 ? ttlMs : undefined);
+      } catch (e) {
+        console.error('Attachment send failed:', e);
+      } finally {
+        setBusyAttachment(false);
+      }
+    },
+    [sendMessage, ttlMs],
+  );
+
+  const handleFilePicked = useCallback(
+    (file: File) => {
+      void file.arrayBuffer().then((buffer) =>
+        sendAttachment(new Uint8Array(buffer), {
+          name: file.name,
+          mime: file.type || 'application/octet-stream',
+          kind: file.type.startsWith('image/') ? 'image' : 'file',
+        }),
+      );
+    },
+    [sendAttachment],
+  );
+
+  const startVoice = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        void blob.arrayBuffer().then((buffer) =>
+          sendAttachment(new Uint8Array(buffer), {
+            name: `voice-${Date.now()}.webm`,
+            mime: recorder.mimeType || 'audio/webm',
+            kind: 'voice',
+          }),
+        );
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch (e) {
+      console.error('Voice recording unavailable:', e);
+    }
+  }, [sendAttachment]);
+
+  const stopAndSendVoice = useCallback(() => {
+    recorderRef.current?.stop();
+    setRecording(false);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -141,6 +209,7 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
 
         {messages.map((msg) => {
           const isMe = msg.senderId !== contact.identity.id;
+          const attachment = isAttachmentContent(msg.content) ? parseAttachment(msg.content) : null;
           return (
             <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
               <div
@@ -150,7 +219,11 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
                     : 'bg-muted/70 text-foreground rounded-bl-none border border-border/40'
                 }`}
               >
-                <p className="break-words leading-relaxed">{msg.content}</p>
+                {attachment ? (
+                  <AttachmentMessage payload={attachment} outgoing={isMe} />
+                ) : (
+                  <p className="break-words leading-relaxed">{msg.content}</p>
+                )}
                 <div
                   className={`flex items-center gap-1.5 text-[10px] mt-1 ${
                     isMe ? 'text-primary-foreground/70' : 'text-muted-foreground'
@@ -188,6 +261,37 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
             <option value={24 * 60 * 60 * 1000}>24h</option>
           </select>
 
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) handleFilePicked(file);
+            }}
+          />
+
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Attach file"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busyAttachment}
+          >
+            <Paperclip className="w-4 h-4" />
+          </Button>
+
+          <Button
+            variant={recording ? 'destructive' : 'ghost'}
+            size="icon"
+            title={recording ? 'Stop and send voice note' : 'Record voice note'}
+            onClick={() => (recording ? stopAndSendVoice() : startVoice())}
+            disabled={busyAttachment}
+          >
+            {recording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </Button>
+
           <Input
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -221,6 +325,68 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
           }}
         />
       )}
+    </div>
+  );
+}
+
+function isAttachmentContent(content: string): boolean {
+  return content.startsWith('{"t":"att"');
+}
+
+function parseAttachment(content: string): AttachmentPayload {
+  return payloadToAttachment(content);
+}
+
+function AttachmentMessage({ payload, outgoing }: { payload: AttachmentPayload; outgoing: boolean }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'gone'>('idle');
+  const [url, setUrl] = useState<string | null>(null);
+
+  const download = async () => {
+    setState('busy');
+    try {
+      const bytes = await resolveAttachmentPayload(payload);
+      if (!bytes) {
+        setState('gone');
+        return;
+      }
+      const blob = new Blob([bytes as unknown as BlobPart], { type: payload.mime });
+      const objectUrl = URL.createObjectURL(blob);
+      if (payload.kind === 'image') setUrl(objectUrl);
+      else {
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = payload.name;
+        a.click();
+      }
+      setState('idle');
+    } catch (e) {
+      console.error('Attachment failed to decrypt:', e);
+      setState('gone');
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={payload.name} className="max-w-48 rounded-lg" />
+      ) : (
+        <>
+          <FileText className="w-4 h-4 shrink-0" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium">{payload.name}</p>
+            <p className="text-[10px] opacity-70">
+              {payload.kind === 'voice' ? 'voice note · ' : ''}
+              {(payload.size / 1024).toFixed(1)} KB
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={download} disabled={state === 'busy'} title="Download + decrypt">
+            {state === 'busy' ? <Timer className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          </Button>
+        </>
+      )}
+      {state === 'gone' && <span className="text-[10px] opacity-70">no longer available</span>}
+      {!outgoing && <span className="sr-only">encrypted attachment</span>}
     </div>
   );
 }
