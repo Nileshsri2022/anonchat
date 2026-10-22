@@ -2,7 +2,7 @@
 // size cap (413), per-client rate limits (429), TTL expiry, identifier-free logs.
 // The body is raw ciphertext bytes; the Relay never inspects or attributes them.
 import { NextRequest, NextResponse } from 'next/server';
-import { relayCore } from '@/lib/relay-core-instance';
+import { relayCore } from '@/lib/instances';
 
 function clientKeyOf(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');

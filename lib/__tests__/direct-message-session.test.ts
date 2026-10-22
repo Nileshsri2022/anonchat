@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { DirectMessageSession, derivePairwiseChannelId } from '../direct-message-session';
-import { generateIdentityKeys, generateEphemeralKeys } from '../crypto';
+import { generateIdentityKeys, generateEphemeralKeys } from './crypto-keygen';
 import type { Contact } from '../contact-manager';
 
 /** Signing keypair for a session's sealed-sender ephemeral signature (Envelope v3). */
@@ -233,7 +233,7 @@ describe('DirectMessageSession - Slice 4: Pairwise Channel ID & Disappearing Mes
 
 describe('DirectMessageSession - Ticket 03: Protocol Hardening', () => {
   test('initiate rejects a Contact whose Pre-Key signature is missing or invalid', async () => {
-    const { generateEphemeralKeys } = await import('../crypto');
+    const { generateEphemeralKeys } = await import('./crypto-keygen');
     const { DirectMessageSession } = await import('../direct-message-session');
 
     const crypto = globalThis.crypto;
@@ -267,7 +267,7 @@ describe('DirectMessageSession - Ticket 03: Protocol Hardening', () => {
       verificationCode: '',
       addedAt: new Date(),
       encryptionStatus: 'pending',
-    }) as any;
+    }) as Contact;
 
     // Valid signature → accepted (session established)
     const ok = new DirectMessageSession({ selfUserId: 'alice', selfIdentityKeys: aliceKeys, selfSigningKeys: await makeSigningKeys() });

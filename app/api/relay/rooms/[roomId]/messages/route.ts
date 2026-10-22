@@ -2,7 +2,7 @@
 // payload caps (413), per-client rate limits (429), payload-hash replay
 // protection with server-assigned sequence numbers (409), expiry sweeps.
 import { NextRequest, NextResponse } from 'next/server';
-import { relayCore } from '@/lib/relay-core-instance';
+import { relayCore } from '@/lib/instances';
 
 interface IncomingMessage {
   id: string;

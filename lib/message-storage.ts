@@ -40,7 +40,6 @@ class MessageStorage {
 
             request.onsuccess = () => {
                 this.db = request.result;
-                console.log('📦 IndexedDB initialized');
                 resolve();
             };
 
@@ -53,7 +52,6 @@ class MessageStorage {
                     store.createIndex('roomId', 'roomId', { unique: false });
                     store.createIndex('timestamp', 'timestamp', { unique: false });
                     store.createIndex('expiresAt', 'expiresAt', { unique: false });
-                    console.log('📦 Created messages store');
                 }
             };
         });

@@ -149,7 +149,7 @@ export class Outbox {
 /** Convenience: the session Outbox over the app-wide storage key. */
 export async function getOutbox(): Promise<Outbox> {
   const { IndexedDBKVStore } = await import('./kv-store');
-  const { getStorageKeyManager } = await import('./storage-key-instance');
+  const { getStorageKeyManager } = await import('./instances');
   const kv = new IndexedDBKVStore();
   try {
     const manager = await getStorageKeyManager();

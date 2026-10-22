@@ -309,7 +309,7 @@ export function CreateGroupModal({ isOpen, onClose, rooms, onCreateGroup }: Crea
 
                             <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
                                 <p className="text-sm">
-                                    <strong>You'll be the admin</strong> of this group and can:
+                                    <strong>You&apos;ll be the admin</strong> of this group and can:
                                 </p>
                                 <ul className="text-xs mt-2 space-y-1 text-muted-foreground">
                                     <li>• Add or remove members</li>

@@ -113,14 +113,14 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
   }, [safetyNumber]);
 
   return (
-    <div className="flex-1 flex flex-col bg-background h-full overflow-hidden">
+    <div className="flex-1 flex flex-col bg-background h-full overflow-hidden min-w-0">
       {/* Tor Circuit Display */}
-      <div className="p-4 border-b border-border/50">
+      <div className="px-3 py-2 sm:px-4 sm:py-3 border-b border-border/50">
         <TorCircuitDisplay />
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/20">
+      <div className="flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/20">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={onClose} title="Back to rooms">
             <ArrowLeft className="w-5 h-5 text-muted-foreground" />
@@ -134,12 +134,12 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-foreground text-base">{contact.alias}</h2>
               {isVerified ? (
-                <Badge variant="outline" className="text-xs text-green-500 border-green-500/30 bg-green-500/10">
+                <Badge variant="outline" className="text-xs text-success border-success/30 bg-success/10">
                   <Shield className="w-3 h-3 mr-1" />
                   Verified
                 </Badge>
               ) : (
-                <Badge variant="outline" className="text-xs text-yellow-500 border-yellow-500/30 bg-yellow-500/10">
+                <Badge variant="outline" className="text-xs text-warning border-warning/30 bg-warning/10">
                   <ShieldAlert className="w-3 h-3 mr-1" />
                   Unverified
                 </Badge>
@@ -153,10 +153,10 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
                 title="Click to copy Safety Number"
               >
                 Safety No: {safetyNumber.slice(0, 14)}...
-                {copiedSafetyNumber ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                {copiedSafetyNumber ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
               </button>
               <span>•</span>
-              <span className={isConnected ? 'text-green-500' : 'text-yellow-500'}>
+              <span className={isConnected ? 'text-success' : 'text-warning'}>
                 {isConnected ? 'E2EE Ratchet Active' : 'Connecting...'}
               </span>
             </div>
@@ -168,7 +168,7 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
             <Button
               size="sm"
               variant="outline"
-              className="text-xs border-yellow-500/40 text-yellow-500 hover:bg-yellow-500/10"
+              className="text-xs border-warning/40 text-warning hover:bg-warning/10"
               onClick={() => setShowVerificationModal(true)}
             >
               Verify Contact
@@ -180,7 +180,7 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
 
       {/* Unverified Security Warning Banner */}
       {!isVerified && (
-        <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-6 py-2.5 flex items-center justify-between text-xs text-yellow-600 dark:text-yellow-400">
+        <div className="bg-warning/10 border-b border-warning/20 px-3 sm:px-6 py-2.5 flex items-center justify-between text-xs text-warning">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 flex-shrink-0" />
             <span>
@@ -199,7 +199,7 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
       )}
 
       {/* Message List */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4">
         <div className="text-center my-4">
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-muted text-muted-foreground">
             <Shield className="w-3.5 h-3.5 text-primary" />
@@ -245,7 +245,7 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
       </div>
 
       {/* Input Bar */}
-      <div className="p-4 border-t border-border bg-card/50">
+      <div className="px-3 sm:px-4 py-3 border-t border-border bg-card/50">
         <div className="flex items-center gap-2">
           {/* TTL selector */}
           <select

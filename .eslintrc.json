@@ -1,0 +1,22 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint"],
+  "rules": {
+    "no-console": ["error", { "allow": ["error", "warn"] }],
+    "@typescript-eslint/no-explicit-any": "error"
+  },
+  "overrides": [
+    {
+      // The relay's logging is identifier-free by design (hardening ticket 07).
+      "files": ["lib/relay-core.ts", "app/api/**/*.ts", "server.js"],
+      "rules": { "no-console": "off" }
+    },
+    {
+      // Electron main-process stdout logs are intentional operational logging.
+      "files": ["electron/**"],
+      "rules": { "no-console": "off" }
+    }
+  ],
+  "ignorePatterns": [".next/", "node_modules/", "out/", "public/sw.js"]
+}

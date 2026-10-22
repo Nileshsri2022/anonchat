@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "entry": [
+    "app/{layout,page}.tsx",
+    "app/api/**/route.ts",
+    "server.js",
+    "electron/main.cjs"
+  ],
+  "project": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "hooks/**/*.{ts,tsx}",
+    "lib/**/*.ts",
+    "electron/*.cjs"
+  ],
+  "ignore": ["public/sw.js"],
+  "ignoreDependencies": [
+    "tailwindcss",
+    "@tailwindcss/postcss",
+    "autoprefixer",
+    "postcss",
+    "tw-animate-css",
+    "eslint-config-next"
+  ]
+}

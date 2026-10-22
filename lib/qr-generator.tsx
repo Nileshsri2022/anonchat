@@ -97,8 +97,6 @@ export function encodeContactQR(contactData: ContactQRData): string {
   const encodedData = encodeURIComponent(jsonData);
   const qrUrl = `${baseUrl}/add-contact?data=${encodedData}`;
 
-  console.log('🔗 Generated QR URL:', qrUrl);
-  console.log('📊 Contact Data:', contactData);
 
   return qrUrl;
 }

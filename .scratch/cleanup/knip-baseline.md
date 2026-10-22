@@ -1,0 +1,97 @@
+# Dead-code baseline — 2026-10-22T15:30:09.575Z
+Entries: app/layout.tsx, app/page.tsx, server.js, electron/main.cjs, electron/preload.js, app/api/relay/blobs/[blobId]/route.ts, app/api/relay/blobs/reserve/route.ts, app/api/relay/blobs/route.ts, app/api/relay/rooms/[roomId]/join/route.ts, app/api/relay/rooms/[roomId]/leave/route.ts, app/api/relay/rooms/[roomId]/messages/route.ts, app/api/relay/rooms/route.ts, app/api/tor-ip/route.ts, app/api/tor-status/route.ts
+Project files: 153, reached: 97, DEAD: 56
+
+## Dead files (56)
+
+- components/encryption-status-bar.tsx
+- components/message-bubble.tsx
+- components/ui/accordion.tsx
+- components/ui/alert-dialog.tsx
+- components/ui/alert.tsx
+- components/ui/aspect-ratio.tsx
+- components/ui/breadcrumb.tsx
+- components/ui/button-group.tsx
+- components/ui/calendar.tsx
+- components/ui/carousel.tsx
+- components/ui/chart.tsx
+- components/ui/collapsible.tsx
+- components/ui/command.tsx
+- components/ui/context-menu.tsx
+- components/ui/drawer.tsx
+- components/ui/dropdown-menu.tsx
+- components/ui/empty.tsx
+- components/ui/field.tsx
+- components/ui/form.tsx
+- components/ui/hover-card.tsx
+- components/ui/input-group.tsx
+- components/ui/input-otp.tsx
+- components/ui/item.tsx
+- components/ui/kbd.tsx
+- components/ui/menubar.tsx
+- components/ui/navigation-menu.tsx
+- components/ui/pagination.tsx
+- components/ui/popover.tsx
+- components/ui/progress.tsx
+- components/ui/radio-group.tsx
+- components/ui/resizable.tsx
+- components/ui/select.tsx
+- components/ui/separator.tsx
+- components/ui/sheet.tsx
+- components/ui/sidebar.tsx
+- components/ui/skeleton.tsx
+- components/ui/slider.tsx
+- components/ui/sonner.tsx
+- components/ui/spinner.tsx
+- components/ui/table.tsx
+- components/ui/textarea.tsx
+- components/ui/toast.tsx
+- components/ui/toaster.tsx
+- components/ui/toggle-group.tsx
+- components/ui/toggle.tsx
+- components/ui/use-mobile.tsx
+- components/ui/use-toast.ts
+- electron/config.cjs
+- hooks/use-mobile.ts
+- hooks/use-toast.ts
+- lib/api-client.ts
+- lib/crypto.ts
+- lib/index.ts
+- lib/tor-bridge.ts
+- lib/transport/transport-adapter.ts
+- lib/unread-badge.ts
+
+## Dead dependencies (32)
+
+- @hookform/resolvers
+- @radix-ui/react-accordion
+- @radix-ui/react-alert-dialog
+- @radix-ui/react-aspect-ratio
+- @radix-ui/react-collapsible
+- @radix-ui/react-context-menu
+- @radix-ui/react-dropdown-menu
+- @radix-ui/react-hover-card
+- @radix-ui/react-menubar
+- @radix-ui/react-navigation-menu
+- @radix-ui/react-popover
+- @radix-ui/react-progress
+- @radix-ui/react-radio-group
+- @radix-ui/react-select
+- @radix-ui/react-separator
+- @radix-ui/react-slider
+- @radix-ui/react-toast
+- @radix-ui/react-toggle
+- @radix-ui/react-toggle-group
+- cmdk
+- date-fns
+- embla-carousel-react
+- input-otp
+- react-day-picker
+- react-hook-form
+- react-resizable-panels
+- recharts
+- sonner
+- tailwindcss-animate
+- tor-control
+- vaul
+- zod

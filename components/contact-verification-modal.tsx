@@ -29,12 +29,8 @@ export function ContactVerificationModal({
   const [verified, setVerified] = useState(false);
 
   const handleVerify = () => {
-    console.log('🔍 Verification modal - Contact ID:', contactId);
-    console.log('🔍 Verification modal - Input code:', inputCode);
-    console.log('🔍 Verification modal - Expected code:', verificationCode);
 
     const isValid = onVerify(contactId, inputCode);
-    console.log('🔍 Verification modal - Is valid:', isValid);
 
     if (isValid) {
       setVerified(true);

@@ -32,8 +32,6 @@ export function ContactList({ onStartChat }: ContactListProps) {
 
   const refreshContacts = () => {
     const allContacts = contactManager.getAllContacts();
-    console.log('🔄 Refreshing contacts, total count:', allContacts.length);
-    console.log('🔄 Contact IDs:', allContacts.map(c => c.id));
     setContacts([...allContacts]);
   };
 
@@ -41,29 +39,23 @@ export function ContactList({ onStartChat }: ContactListProps) {
     refreshContacts();
   }, []);
 
-  const handleAddContact = (contactData: any) => {
+  const handleAddContact = (contactData: Contact) => {
     // This would be called from QR modal
     refreshContacts();
   };
 
   const handleVerifyContact = (contactId: string, code: string) => {
-    console.log('🔐 Attempting to verify contact:', contactId, 'with code:', code);
 
     const contact = contactManager.getContact(contactId);
-    console.log('👤 Contact data:', contact);
 
     if (contact) {
-      console.log('📋 Contact verification code:', contact.verificationCode);
     }
 
     const success = contactManager.verifyContact(contactId, code);
-    console.log('✅ Verification result:', success);
 
     if (success) {
-      console.log('🔄 Refreshing contacts after successful verification');
       refreshContacts();
     } else {
-      console.log('❌ Verification failed');
     }
     return success;
   };
@@ -105,9 +97,9 @@ export function ContactList({ onStartChat }: ContactListProps) {
 
   return (
     <>
-      <div className="w-80 border-r border-border bg-muted/20 flex flex-col h-screen">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Header */}
-        <div className="p-4 border-b border-border">
+        <div className="pl-4 pr-12 pt-4 pb-3 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-lg text-foreground">Contacts</h2>
           </div>

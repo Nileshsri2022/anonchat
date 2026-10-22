@@ -1,7 +1,7 @@
 // Relay blob fetch — expired and unknown blobs are indistinguishable (404),
 // so a blob id leaks nothing about its history (ADR-0009, ticket 19).
 import { NextRequest, NextResponse } from 'next/server';
-import { relayCore } from '@/lib/relay-core-instance';
+import { relayCore } from '@/lib/instances';
 
 export async function GET(
   request: NextRequest,

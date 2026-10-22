@@ -1,6 +1,6 @@
 // Relay join endpoint — real membership via RelayCore (ticket 07).
 import { NextRequest, NextResponse } from 'next/server';
-import { relayCore } from '@/lib/relay-core-instance';
+import { relayCore } from '@/lib/instances';
 
 export async function POST(
   request: NextRequest,

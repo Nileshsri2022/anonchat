@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, KeyRound, Lock, LockOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getOrCreateVault } from '@/lib/vault-instance';
-import { getStorageKeyManager, resetHistoryStorage } from '@/lib/storage-key-instance';
+import { getOrCreateVault } from '@/lib/instances';
+import { getStorageKeyManager, resetHistoryStorage } from '@/lib/instances';
 
 /**
  * Local-data vault controls: shows the seal state of locally stored data,
@@ -106,8 +106,8 @@ export function ProfilePassphraseSettings() {
       </h3>
 
       {!hasPassphrase && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-          <AlertTriangle className="w-4 h-4 mt-0.5 text-amber-500 shrink-0" />
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3">
+          <AlertTriangle className="w-4 h-4 mt-0.5 text-warning shrink-0" />
           <p className="text-xs text-foreground">
             <strong>Unencrypted local data:</strong> your messages and identity are stored on this device without
             encryption. Set a Profile Passphrase to seal them.
@@ -150,7 +150,7 @@ export function ProfilePassphraseSettings() {
         </Button>
       )}
 
-      {message && <p className="text-xs text-green-500">{message}</p>}
+      {message && <p className="text-xs text-success">{message}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       <p className="text-xs text-muted-foreground">

@@ -28,9 +28,9 @@ interface RoomListProps {
 
 export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, onCreateRoom, onCreateGroup, onOpenSettings }: RoomListProps) {
   return (
-    <div className="w-80 border-r border-border bg-muted/20 flex flex-col">
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center justify-between mb-4">
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="pl-4 pr-12 pt-4 pb-3 border-b border-border">
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
           <h2 className="font-semibold text-lg text-foreground">Chatrooms</h2>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -83,7 +83,7 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
                   <div className="flex items-center gap-1.5 font-semibold text-sm">
                     {room.isProtected && (
                       <span title="Room Passphrase Protected" className="flex items-center">
-                        <Lock className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
+                        <Lock className="w-3.5 h-3.5 text-warning flex-shrink-0" />
                       </span>
                     )}
                     <span className="truncate">{room.name}</span>
@@ -103,7 +103,7 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
                     ID: {room.id.slice(0, 8)}...
                   </Badge>
                   {room.isProtected && (
-                    <Badge variant="outline" className="text-[10px] text-yellow-500 border-yellow-500/30 bg-yellow-500/10">
+                    <Badge variant="outline" className="text-[10px] text-warning border-warning/30 bg-warning/10">
                       Protected
                     </Badge>
                   )}

@@ -1,11 +1,15 @@
 // Socket.IO client service for real-time messaging
+
+// Wire payloads are opaque to the transport: the transport layer cannot
+// know their shape, so consumers own parsing/narrowing (ADR-0012).
+export type WireMessage = unknown;
 import { io, Socket } from 'socket.io-client';
 
 class SocketService {
     private socket: Socket | null = null;
     private connected: boolean = false;
     private currentRoom: string | null = null;
-    private messageHandlers: Map<string, (message: any) => void> = new Map();
+    private messageHandlers: Map<string, (message: WireMessage) => void> = new Map();
 
     connect(): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -23,13 +27,11 @@ class SocketService {
             });
 
             this.socket.on('connect', () => {
-                console.log('🔌 WebSocket connected');
                 this.connected = true;
                 resolve();
             });
 
             this.socket.on('disconnect', () => {
-                console.log('🔌 WebSocket disconnected');
                 this.connected = false;
             });
 
@@ -39,8 +41,7 @@ class SocketService {
             });
 
             // Listen for incoming messages
-            this.socket.on('message', (message: any) => {
-                console.log('💬 Received message via WebSocket');
+            this.socket.on('message', (message: WireMessage) => {
                 // A '*' handler receives every room's messages (used by the DM client,
                 // which routes envelopes by their Pairwise Channel itself).
                 const globalHandler = this.messageHandlers.get('*');
@@ -58,11 +59,9 @@ class SocketService {
 
             // Listen for user events
             this.socket.on('user-joined', (data: { userId: string; username: string }) => {
-                console.log(`👤 ${data.username} joined the room`);
             });
 
             this.socket.on('user-left', (data: { userId: string }) => {
-                console.log(`👤 User ${data.userId} left the room`);
             });
         });
     }
@@ -80,7 +79,6 @@ class SocketService {
         if (this.socket?.connected) {
             this.currentRoom = roomId;
             this.socket.emit('join-room', roomId, userId, username);
-            console.log(`🔌 Joined room ${roomId.slice(0, 8)} via WebSocket`);
         }
     }
 
@@ -92,14 +90,16 @@ class SocketService {
         }
     }
 
-    sendMessage(roomId: string, message: any) {
+    sendMessage(roomId: string, message: WireMessage) {
         if (this.socket?.connected) {
             this.socket.emit('new-message', roomId, message);
         }
     }
 
-    onMessage(roomId: string, handler: (message: any) => void) {
-        this.messageHandlers.set(roomId, handler);
+    onMessage<T = WireMessage>(roomId: string, handler: (message: T) => void) {
+        // The generic keeps consumer-side payload types; the transport stores
+        // them opaquely and hands them back untouched.
+        this.messageHandlers.set(roomId, handler as (message: WireMessage) => void);
     }
 
     isConnected(): boolean {

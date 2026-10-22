@@ -84,7 +84,7 @@ describe('Sealed sender — Envelope v3 (ticket 16)', () => {
   });
 
   test('fail closed: an unsigned first message is refused — no identity, no session', async () => {
-    const { generateIdentityKeys, generateEphemeralKeys } = await import('../crypto');
+    const { generateIdentityKeys, generateEphemeralKeys } = await import('./crypto-keygen');
     const bobKeys = await generateIdentityKeys();
     const bobPreKeys = await generateEphemeralKeys();
     const bobSigning = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);

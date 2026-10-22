@@ -13,7 +13,7 @@ import {
   deriveSas,
   type IdentityBundle,
 } from '@/lib/identity-bundle';
-import { getOrCreateVault } from '@/lib/vault-instance';
+import { getOrCreateVault } from '@/lib/instances';
 import { contactManager, type Contact } from '@/lib/contact-manager';
 import { identityService } from '@/lib/identity-service';
 
