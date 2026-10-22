@@ -14,7 +14,7 @@ describe('Relay blob store (ticket 19)', () => {
   test('S2: a blob round-trips byte-for-byte and gets an unguessable id', async () => {
     const relay = new RelayCore({ blobUploadsPerMin: 100 });
     const data = bytes(1024, 0x7f);
-    const result = await relay.putBlob({ data, clientKey: 'client-1' });
+    const result = relay.putBlob({ data, clientKey: 'client-1' });
     expect(result.accepted).toBe(true);
     const { blobId } = result as { accepted: true; blobId: string };
     expect(blobId).toBeTruthy();
@@ -27,7 +27,7 @@ describe('Relay blob store (ticket 19)', () => {
 
   test('S2: oversized blobs are rejected with an oversize reason', async () => {
     const relay = new RelayCore({ maxBlobBytes: 1024, blobUploadsPerMin: 100 });
-    const oversize = await relay.putBlob({ data: bytes(2048), clientKey: 'client-big' });
+    const oversize = relay.putBlob({ data: bytes(2048), clientKey: 'client-big' });
     expect(oversize.accepted).toBe(false);
     if (!oversize.accepted) expect(oversize.reason).toMatch(/exceeds/i);
   });
@@ -35,19 +35,19 @@ describe('Relay blob store (ticket 19)', () => {
   test('S2: uploads are rate limited per client', async () => {
     const relay = new RelayCore({ blobUploadsPerMin: 3, blobBurst: 3 });
     for (let i = 0; i < 3; i++) {
-      await relay.putBlob({ data: bytes(16), clientKey: 'client-flood' });
+      relay.putBlob({ data: bytes(16), clientKey: 'client-flood' });
     }
-    const flooded = await relay.putBlob({ data: bytes(16), clientKey: 'client-flood' });
+    const flooded = relay.putBlob({ data: bytes(16), clientKey: 'client-flood' });
     expect(flooded.accepted).toBe(false);
     if (!flooded.accepted) expect(flooded.reason).toMatch(/rate/i);
     // A different client is unaffected
-    const other = await relay.putBlob({ data: bytes(16), clientKey: 'client-other' });
+    const other = relay.putBlob({ data: bytes(16), clientKey: 'client-other' });
     expect(other.accepted).toBe(true);
   });
 
   test('S2: expired blobs disappear via TTL and sweep', async () => {
     const relay = new RelayCore({ blobTtlMs: 50, blobUploadsPerMin: 100 });
-    const put = await relay.putBlob({ data: bytes(16), clientKey: 'c' });
+    const put = relay.putBlob({ data: bytes(16), clientKey: 'c' });
     if (!put.accepted) throw new Error('put should succeed');
     const blobId = put.blobId;
     expect(await relay.getBlob(blobId)).not.toBeNull();
@@ -65,13 +65,13 @@ describe('Relay blob store (ticket 19)', () => {
 
   test('S2: blob records store no client-identifying metadata', async () => {
     const relay = new RelayCore({ blobUploadsPerMin: 100 });
-    const put = await relay.putBlob({ data: bytes(16), clientKey: 'client-traceable' });
+    const put = relay.putBlob({ data: bytes(16), clientKey: 'client-traceable' });
     if (!put.accepted) throw new Error('put should succeed');
     const blobId = put.blobId;
     const stored = (relay as unknown as { blobs: Map<string, Record<string, unknown>> }).blobs.get(blobId)!;
     const keys = Object.keys(stored);
     for (const key of keys) {
-      expect(['data', 'createdAt', 'expiresAt', 'payloadHash']).toContain(key);
+      expect(['data', 'createdAt', 'expiresAt']).toContain(key);
     }
     expect(JSON.stringify(stored)).not.toContain('client-traceable');
   });

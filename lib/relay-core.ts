@@ -54,7 +54,6 @@ interface StoredBlob {
   data: Uint8Array<ArrayBuffer>;
   createdAt: number;
   expiresAt: number;
-  payloadHash: string;
 }
 
 interface StoredMessage extends RelayMessage {
@@ -261,9 +260,10 @@ export class RelayCore {
   /** Removes expired messages and stale replay windows. Returns removed count. */
   /**
    * Store an opaque encrypted blob (ADR-0009). The Relay never inspects or
-   * attributes the payload; records hold only data, timestamps, and a hash.
+   * attributes the payload; records hold only the data and its timestamps —
+   * ids are already unguessable, so no content hash is kept.
    */
-  async putBlob(input: { data: Uint8Array; clientKey: string }): Promise<PutBlobResult> {
+  putBlob(input: { data: Uint8Array; clientKey: string }): PutBlobResult {
     if (input.data.byteLength > this.maxBlobBytes) {
       return { accepted: false, reason: `blob exceeds ${this.maxBlobBytes} byte cap` };
     }
@@ -282,7 +282,6 @@ export class RelayCore {
       })(),
       createdAt: now,
       expiresAt: now + this.blobTtlMs,
-      payloadHash: await sha256Hex(String(input.data.byteLength)),
     });
     return { accepted: true, blobId };
   }
