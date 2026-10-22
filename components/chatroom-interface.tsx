@@ -61,7 +61,7 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, o
             <div className="flex items-center gap-1.5">
               <h2 className="font-semibold text-foreground">{roomName}</h2>
               {isProtected && (
-                <span title="Password-Protected Room">
+                <span title="Room Passphrase Protected">
                   <Lock className="w-3.5 h-3.5 text-yellow-500" />
                 </span>
               )}

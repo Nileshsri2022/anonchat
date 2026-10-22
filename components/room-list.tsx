@@ -82,7 +82,7 @@ export const RoomList = memo(function RoomList({ rooms, selectedId, onSelect, on
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex items-center gap-1.5 font-semibold text-sm">
                     {room.isProtected && (
-                      <span title="Password-Protected Room" className="flex items-center">
+                      <span title="Room Passphrase Protected" className="flex items-center">
                         <Lock className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
                       </span>
                     )}

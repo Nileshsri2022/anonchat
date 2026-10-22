@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Contact } from '@/lib/contact-manager';
 import { DirectMessageSession, type DecryptedMessage, type MessageEnvelope } from '@/lib/direct-message-session';
-import { generateIdentityKeys, generateEphemeralKeys } from '@/lib/crypto';
+import { generateEphemeralKeys, getOrCreateIdentityKeys } from '@/lib/crypto';
 import { socketService } from '@/lib/socket-service';
 import { relayAPI } from '@/lib/relay-api';
 
@@ -42,7 +42,7 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
 
     async function setupSession(): Promise<(() => void) | undefined> {
       try {
-        const selfIdentityKeys = await generateIdentityKeys();
+        const selfIdentityKeys = await getOrCreateIdentityKeys();
         const selfPreKeys = await generateEphemeralKeys();
 
         const session = new DirectMessageSession({

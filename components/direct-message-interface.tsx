@@ -21,7 +21,7 @@ interface DirectMessageInterfaceProps {
 export function DirectMessageInterface({ contact, onClose, onContactVerified }: DirectMessageInterfaceProps) {
   const [inputText, setInputText] = useState('');
   const [ttlMs, setTtlMs] = useState<number>(0);
-  const [copiedFingerprint, setCopiedFingerprint] = useState(false);
+  const [copiedSafetyNumber, setCopiedSafetyNumber] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -40,8 +40,8 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
 
   const handleCopySafetyNumber = useCallback(() => {
     navigator.clipboard.writeText(safetyNumber);
-    setCopiedFingerprint(true);
-    setTimeout(() => setCopiedFingerprint(false), 2000);
+    setCopiedSafetyNumber(true);
+    setTimeout(() => setCopiedSafetyNumber(false), 2000);
   }, [safetyNumber]);
 
   return (
@@ -82,10 +82,10 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
               <button
                 onClick={handleCopySafetyNumber}
                 className="hover:text-foreground transition-colors font-mono flex items-center gap-1"
-                title="Click to copy safety number fingerprint"
+                title="Click to copy Safety Number"
               >
                 Safety No: {safetyNumber.slice(0, 14)}...
-                {copiedFingerprint ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                {copiedSafetyNumber ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
               </button>
               <span>•</span>
               <span className={isConnected ? 'text-green-500' : 'text-yellow-500'}>

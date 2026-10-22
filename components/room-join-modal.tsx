@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, Users, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { roomEncryption } from '@/lib/room-encryption';
+import { RoomEncryption, roomEncryption } from '@/lib/room-encryption';
 import { relayAPI } from '@/lib/relay-api';
 
 interface RoomJoinModalProps {
@@ -84,19 +84,25 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
 
       if (joinResult.isProtected) {
         if (!joinPassphrase.trim()) {
-          setError('This room is password-protected. Please enter the room passphrase.');
+          // Immediately leave room so relay does not track an unauthenticated phantom user
+          await relayAPI.leaveRoom(cleanRoomId, currentUserId);
+          setError('This Room requires a Room Passphrase. Please enter the Room Passphrase.');
           setIsLoading(false);
           return;
         }
 
         // Validate via Room Canary zero-knowledge trial decryption
         if (joinResult.canary) {
-          const trialEncryption = new (roomEncryption.constructor as any)();
-          await trialEncryption.deriveKeyFromPassphrase(cleanRoomId, joinPassphrase.trim());
-          const isValid = await trialEncryption.verifyCanary(joinResult.canary);
+          const { valid } = await RoomEncryption.verifyPassphrase(
+            cleanRoomId,
+            joinPassphrase.trim(),
+            joinResult.canary
+          );
 
-          if (!isValid) {
-            setError('Incorrect room passphrase. Please check the secret and try again.');
+          if (!valid) {
+            // Immediately leave room on canary verification failure
+            await relayAPI.leaveRoom(cleanRoomId, currentUserId);
+            setError('Incorrect Room Passphrase. Please check the secret and try again.');
             setIsLoading(false);
             return;
           }
@@ -128,10 +134,10 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" />
-            Join or Create Chatroom
+            Join or Create Room
           </DialogTitle>
           <DialogDescription>
-            Connect with multiple users in encrypted anonymous chatrooms via Tor
+            Connect with Contacts in encrypted anonymous Rooms via Tor
           </DialogDescription>
         </DialogHeader>
 
@@ -245,11 +251,11 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
             <div className="bg-primary/10 p-3.5 rounded-lg border border-primary/20 space-y-1.5 text-xs text-muted-foreground">
               <p className="font-semibold text-foreground flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-primary" />
-                Password Protection Rules:
+                Room Passphrase Rules:
               </p>
               <ul className="list-disc list-inside space-y-1">
-                <li>If set, only peers who know the passphrase can decrypt messages</li>
-                <li>An encrypted canary token is created to verify joining users</li>
+                <li>If set, only Contacts who know the Room Passphrase can decrypt messages</li>
+                <li>An encrypted Room Canary is created to verify joining Contacts</li>
                 <li>Relay servers only route opaque ciphertext</li>
               </ul>
             </div>

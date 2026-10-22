@@ -197,6 +197,12 @@ describe('DirectMessageSession - Slice 4: Pairwise Channel ID & Disappearing Mes
     expect(channel1).toBe(channel2);
     expect(channel1.startsWith('dm_')).toBe(true);
     expect(channel1.length).toBe(3 + 64); // 'dm_' + 64 hex characters
+
+    // Explicitly verify ADR-0001 format: dm_${sha256(min(pkA, pkB) + ":" + max(pkA, pkB))}
+    const sorted = [keyA, keyB].sort();
+    const expectedHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${sorted[0]}:${sorted[1]}`));
+    const expectedHex = Array.from(new Uint8Array(expectedHash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    expect(channel1).toBe(`dm_${expectedHex}`);
   });
 
   test('Envelope and decrypted message carry synchronized TTL and expiresAt timestamps', async () => {

@@ -39,6 +39,16 @@ export async function generateIdentityKeys(): Promise<IdentityKeys> {
   return { publicKey: keyPair.publicKey, privateKey: keyPair.privateKey };
 }
 
+let cachedIdentityKeys: IdentityKeys | null = null;
+
+// Get or lazily initialize persistent local identity keys
+export async function getOrCreateIdentityKeys(): Promise<IdentityKeys> {
+  if (!cachedIdentityKeys) {
+    cachedIdentityKeys = await generateIdentityKeys();
+  }
+  return cachedIdentityKeys;
+}
+
 // Generate ephemeral ECDH P-256 keys for DH
 export async function generateEphemeralKeys(): Promise<IdentityKeys> {
   const keyPair = await crypto.subtle.generateKey(

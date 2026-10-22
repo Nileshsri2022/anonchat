@@ -1,5 +1,5 @@
-// Room-level encryption utilities for multi-user chatrooms
-// Uses AES-256-GCM for symmetric encryption with shared room keys and PBKDF2 for passworded rooms
+// Room-level encryption utilities for multi-user Rooms
+// Uses AES-256-GCM for symmetric encryption with shared room keys and PBKDF2 for Rooms with a Room Passphrase
 
 export interface EncryptedMessage {
   ciphertext: string;
@@ -158,6 +158,14 @@ export class RoomEncryption {
     return this.encrypt(ROOM_CANARY_TOKEN);
   }
 
+  getRoomKey(): CryptoKey | null {
+    return this.roomKey;
+  }
+
+  setRoomKey(key: CryptoKey): void {
+    this.roomKey = key;
+  }
+
   /**
    * Validate a trial passphrase zero-knowledge by decrypting the Room Canary
    */
@@ -168,6 +176,21 @@ export class RoomEncryption {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Encapsulated static helper to verify a trial passphrase against a Room Canary.
+   * Returns valid status and the derived CryptoKey so callers avoid re-deriving with PBKDF2.
+   */
+  static async verifyPassphrase(
+    roomId: string,
+    passphrase: string,
+    canary: EncryptedMessage
+  ): Promise<{ valid: boolean; key?: CryptoKey }> {
+    const trial = new RoomEncryption();
+    await trial.deriveKeyFromPassphrase(roomId, passphrase);
+    const valid = await trial.verifyCanary(canary);
+    return { valid, key: valid ? trial.getRoomKey() || undefined : undefined };
   }
 }
 

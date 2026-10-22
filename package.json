@@ -12,6 +12,8 @@
     "build": "next build",
     "dev": "bun run server.js",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "start": "bun run server.js",
     "electron": "electron .",
     "electron-dev": "concurrently \"cross-env BROWSER=none bun run server.js\" \"wait-on http://localhost:3000 && electron .\"",

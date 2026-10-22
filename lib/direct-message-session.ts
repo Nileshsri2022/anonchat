@@ -44,7 +44,7 @@ export interface DirectMessageSessionConfig {
  */
 export async function derivePairwiseChannelId(pkA: string, pkB: string): Promise<string> {
   const sorted = [pkA.trim(), pkB.trim()].sort();
-  const combined = new TextEncoder().encode(sorted.join(':::'));
+  const combined = new TextEncoder().encode(sorted.join(':'));
   const hash = await crypto.subtle.digest('SHA-256', combined);
   const hex = Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -118,28 +118,27 @@ export class DirectMessageSession {
     );
 
     // X3DH calculation using sendDH:
-    const dh1 = await crypto.subtle.deriveBits(
+    const dhIdentityPreKey = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: remotePreKey },
       this.selfIdentityKeys.privateKey,
       256
     );
-    const dh2 = await crypto.subtle.deriveBits(
+    const dhEphemeralIdentity = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: remoteIdentityKey },
       this.sendDH.privateKey,
       256
     );
-    const dh3 = await crypto.subtle.deriveBits(
+    const dhEphemeralPreKey = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: remotePreKey },
       this.sendDH.privateKey,
       256
     );
 
-    const combinedDH = new Uint8Array([
-      ...new Uint8Array(dh1),
-      ...new Uint8Array(dh2),
-      ...new Uint8Array(dh3),
-    ]);
-    const masterSharedSecret = await crypto.subtle.digest('SHA-256', combinedDH);
+    const masterSharedSecret = await this.computeX3DHSecret(
+      dhIdentityPreKey,
+      dhEphemeralIdentity,
+      dhEphemeralPreKey
+    );
 
     this.rootKey = masterSharedSecret;
     this.sendChainKey = masterSharedSecret;
@@ -163,28 +162,27 @@ export class DirectMessageSession {
     const remoteDH = await this.importKeyFromString(envelope.header.dhPublic, 'public');
 
     // Bob X3DH:
-    const dh1 = await crypto.subtle.deriveBits(
+    const dhPreKeyIdentity = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: remoteIdentityKey },
       this.selfPreKeys.privateKey,
       256
     );
-    const dh2 = await crypto.subtle.deriveBits(
+    const dhIdentityEphemeral = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: remoteDH },
       this.selfIdentityKeys.privateKey,
       256
     );
-    const dh3 = await crypto.subtle.deriveBits(
+    const dhPreKeyEphemeral = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: remoteDH },
       this.selfPreKeys.privateKey,
       256
     );
 
-    const combinedDH = new Uint8Array([
-      ...new Uint8Array(dh1),
-      ...new Uint8Array(dh2),
-      ...new Uint8Array(dh3),
-    ]);
-    const masterSharedSecret = await crypto.subtle.digest('SHA-256', combinedDH);
+    const masterSharedSecret = await this.computeX3DHSecret(
+      dhPreKeyIdentity,
+      dhIdentityEphemeral,
+      dhPreKeyEphemeral
+    );
 
     this.rootKey = masterSharedSecret;
     this.recvChainKey = masterSharedSecret;
@@ -384,8 +382,8 @@ export class DirectMessageSession {
       this.sendDH.privateKey,
       256
     );
-    const { rootKey: rk1, chainKey: recvChain } = await this.kdfRK(this.rootKey, dhRecv);
-    this.rootKey = rk1;
+    const { rootKey: recvRootKey, chainKey: recvChain } = await this.kdfRK(this.rootKey, dhRecv);
+    this.rootKey = recvRootKey;
     this.recvChainKey = recvChain;
 
     // DH step 2: Generate new sendDH keypair and advance send chain
@@ -400,8 +398,8 @@ export class DirectMessageSession {
       this.sendDH.privateKey,
       256
     );
-    const { rootKey: rk2, chainKey: sendChain } = await this.kdfRK(this.rootKey, dhSend);
-    this.rootKey = rk2;
+    const { rootKey: sendRootKey, chainKey: sendChain } = await this.kdfRK(this.rootKey, dhSend);
+    this.rootKey = sendRootKey;
     this.sendChainKey = sendChain;
   }
 
@@ -429,12 +427,25 @@ export class DirectMessageSession {
     }
   }
 
-  // --- KDF Helpers ---
+  // --- Cryptographic & KDF Helpers ---
 
-  private async kdfRK(rk: ArrayBuffer, dhOut: ArrayBuffer): Promise<{ rootKey: ArrayBuffer; chainKey: ArrayBuffer }> {
+  private async computeX3DHSecret(
+    dhA: ArrayBuffer,
+    dhB: ArrayBuffer,
+    dhC: ArrayBuffer
+  ): Promise<ArrayBuffer> {
+    const combinedDH = new Uint8Array([
+      ...new Uint8Array(dhA),
+      ...new Uint8Array(dhB),
+      ...new Uint8Array(dhC),
+    ]);
+    return crypto.subtle.digest('SHA-256', combinedDH);
+  }
+
+  private async kdfRK(currentRootKey: ArrayBuffer, dhOut: ArrayBuffer): Promise<{ rootKey: ArrayBuffer; chainKey: ArrayBuffer }> {
     const hmacKey = await crypto.subtle.importKey(
       'raw',
-      rk,
+      currentRootKey,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
