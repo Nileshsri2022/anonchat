@@ -23,6 +23,8 @@ export interface ContactIdentity {
   identitySigningPublicKey?: string;
   /** ECDSA-P256-SHA-256 signature over the Pre-Key's SPKI bytes (base64). */
   preKeySignature?: string;
+  /** ML-KEM-768 public key (base64) for the hybrid PQ handshake (ADR-0006). */
+  pqKemPublicB64?: string;
 }
 
 export interface Contact {

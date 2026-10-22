@@ -55,6 +55,9 @@ export class DirectMessageClient {
       selfUserId: this.selfUserId,
       selfIdentityKeys: identityKeys,
       selfPreKeys: { id: preKey.id, publicKey: preKey.publicKey, privateKey: preKey.privateKey },
+      pqDecapsulate: this.vault.hasPqKem()
+        ? (cipherText) => this.vault.decapsulatePq(cipherText)
+        : undefined,
     });
   }
 

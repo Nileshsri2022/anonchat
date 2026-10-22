@@ -7,14 +7,21 @@ import type { IdentityVault } from './identity-vault';
 export const INVITE_PREFIX = 'anonchat-invite-v1:';
 
 export interface IdentityBundle {
-  version: 1;
+  /** v2 adds the ML-KEM-768 PQ key + its signature (ADR-0006); v1 remains valid. */
+  version: 1 | 2;
   identityPublicKeySpkiB64: string;
   identitySigningPublicKeySpkiB64: string;
   preKeyPublicSpkiB64: string;
   preKeySignatureB64: string;
   preKeyId: number;
+  /** ML-KEM-768 public key (base64) — present iff version 2. */
+  pqKemPublicB64?: string;
+  /** ECDSA-P256-SHA-256 signature over the PQ key bytes (base64) — present iff version 2. */
+  pqKemSignatureB64?: string;
   createdAt: number;
 }
+
+const PQ_SIGNATURE_DOMAIN = 'anonchat-pqkem-v1|';
 
 function bytesToB64(bytes: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)));
@@ -30,7 +37,7 @@ function b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
 /** Exports the vault's public Identity Bundle (vault must be unlocked). */
 export async function exportIdentityBundle(vault: IdentityVault): Promise<IdentityBundle> {
   const data = await vault.getIdentityData();
-  return {
+  const base: IdentityBundle = {
     version: 1,
     identityPublicKeySpkiB64: data.identity.publicKeySpkiB64,
     identitySigningPublicKeySpkiB64: data.signing.publicKeySpkiB64,
@@ -38,6 +45,18 @@ export async function exportIdentityBundle(vault: IdentityVault): Promise<Identi
     preKeySignatureB64: data.signedPreKey.signatureB64,
     preKeyId: data.signedPreKey.id,
     createdAt: data.createdAt,
+  };
+  if (!vault.hasPqKem()) return base;
+
+  const pqPublicB64 = vault.getPqKemPublicB64();
+  const signing = await vault.getSigningKeyPair();
+  const signed = new Uint8Array([...new TextEncoder().encode(PQ_SIGNATURE_DOMAIN), ...b64ToBytes(pqPublicB64)]);
+  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, signing.privateKey, signed);
+  return {
+    ...base,
+    version: 2,
+    pqKemPublicB64: pqPublicB64,
+    pqKemSignatureB64: bytesToB64(signature),
   };
 }
 
@@ -64,14 +83,18 @@ export function parseInvite(invite: string): IdentityBundle {
   }
   const b = json as Partial<IdentityBundle>;
   const isB64 = (v: unknown) => typeof v === 'string' && v.length > 0 && /^[A-Za-z0-9+/=]+$/.test(v);
+  const pqFieldsOk =
+    (b.pqKemPublicB64 === undefined && b.pqKemSignatureB64 === undefined) ||
+    (isB64(b.pqKemPublicB64) && isB64(b.pqKemSignatureB64));
   if (
-    b.version !== 1 ||
+    (b.version !== 1 && b.version !== 2) ||
     !isB64(b.identityPublicKeySpkiB64) ||
     !isB64(b.identitySigningPublicKeySpkiB64) ||
     !isB64(b.preKeyPublicSpkiB64) ||
     !isB64(b.preKeySignatureB64) ||
     typeof b.preKeyId !== 'number' ||
-    typeof b.createdAt !== 'number'
+    typeof b.createdAt !== 'number' ||
+    !pqFieldsOk
   ) {
     throw new Error('Invite payload is missing or has invalid Identity Bundle fields');
   }
@@ -96,6 +119,25 @@ export async function validateBundle(bundle: IdentityBundle): Promise<void> {
   );
   if (!ok) {
     throw new Error('Identity Bundle signature verification failed');
+  }
+
+  if (Boolean(bundle.pqKemPublicB64) !== Boolean(bundle.pqKemSignatureB64)) {
+    throw new Error('Identity Bundle PQ key and signature must be present together');
+  }
+  if (bundle.pqKemPublicB64 && bundle.pqKemSignatureB64) {
+    const pqSigned = new Uint8Array([
+      ...new TextEncoder().encode(PQ_SIGNATURE_DOMAIN),
+      ...b64ToBytes(bundle.pqKemPublicB64),
+    ]);
+    const pqOk = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      signingPub,
+      b64ToBytes(bundle.pqKemSignatureB64),
+      pqSigned,
+    );
+    if (!pqOk) {
+      throw new Error('Identity Bundle PQ key signature verification failed');
+    }
   }
 }
 

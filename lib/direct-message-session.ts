@@ -1,3 +1,4 @@
+import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 import { webcrypto } from 'crypto';
 import type { Contact } from './contact-manager';
 
@@ -20,7 +21,9 @@ export interface MessageEnvelope {
   senderId: string;
   senderIdentityPublic: string; // base64 SPKI or JWK
   header: {
-    dhPublic: string; // base64 SPKI
+    dhPublic: string;
+    /** ML-KEM-768 ciphertext (base64) on the FIRST envelope of a hybrid handshake (ADR-0006). */
+    pqCiphertext?: string; // base64 SPKI
     n: number;
     pn: number;
   };
@@ -48,6 +51,8 @@ export interface DirectMessageSessionConfig {
   selfPreKeys?: PreKeys;
   /** Upper bound for the Skipped-Key Cache (default 1000). */
   maxSkippedKeys?: number;
+  /** ML-KEM decapsulation capability — the responder side of the hybrid handshake (ADR-0006). */
+  pqDecapsulate?: (cipherText: Uint8Array) => Promise<Uint8Array<ArrayBuffer>>;
 }
 
 /**
@@ -83,6 +88,10 @@ export class DirectMessageSession {
   private recvMessageNumber = 0;
   private previousChainLength = 0;
 
+  private readonly pqDecapsulate?: (cipherText: Uint8Array) => Promise<Uint8Array<ArrayBuffer>>;
+  /** Initiator-only: KEM ciphertext sent on the FIRST envelope of a hybrid session. */
+  private pendingPqCiphertext?: string;
+
   // Skipped-key cache for out-of-order message delivery (max 1000 keys)
   private skippedKeys = new Map<string, ArrayBuffer>();
   private readonly MAX_SKIPPED_KEYS: number;
@@ -97,6 +106,7 @@ export class DirectMessageSession {
     this.selfUserId = config.selfUserId;
     this.selfIdentityKeys = config.selfIdentityKeys;
     this.selfPreKeys = config.selfPreKeys;
+    this.pqDecapsulate = config.pqDecapsulate;
     this.MAX_SKIPPED_KEYS = config.maxSkippedKeys ?? 1000;
   }
 
@@ -156,10 +166,21 @@ export class DirectMessageSession {
       256
     );
 
+    // Hybrid PQ share (ADR-0006): encapsulate against the Contact's ML-KEM key when published.
+    let pqShared: Uint8Array<ArrayBuffer> | undefined;
+    if (recipientContact.identity.pqKemPublicB64) {
+      const encapsulated = ml_kem768.encapsulate(
+        this.b64ToBytes(recipientContact.identity.pqKemPublicB64),
+      );
+      pqShared = this.copyBytes(encapsulated.sharedSecret);
+      this.pendingPqCiphertext = this.bytesToB64(encapsulated.cipherText);
+    }
+
     const masterSharedSecret = await this.computeX3DHSecret(
       dhIdentityPreKey,
       dhEphemeralIdentity,
-      dhEphemeralPreKey
+      dhEphemeralPreKey,
+      pqShared
     );
 
     this.rootKey = masterSharedSecret;
@@ -201,10 +222,22 @@ export class DirectMessageSession {
       256
     );
 
+    // Hybrid PQ share (ADR-0006): a KEM ciphertext on the handshake envelope MUST be
+    // decapsulatable — the initiator already derived the hybrid root, so degrading to
+    // classical would silently produce a dead session.
+    let pqShared: Uint8Array<ArrayBuffer> | undefined;
+    if (envelope.header.pqCiphertext) {
+      if (!this.pqDecapsulate) {
+        throw new Error('Hybrid PQ handshake required but this session lacks PQ capability');
+      }
+      pqShared = await this.pqDecapsulate(this.b64ToBytes(envelope.header.pqCiphertext));
+    }
+
     const masterSharedSecret = await this.computeX3DHSecret(
       dhPreKeyIdentity,
       dhIdentityEphemeral,
-      dhPreKeyEphemeral
+      dhPreKeyEphemeral,
+      pqShared
     );
 
     this.rootKey = masterSharedSecret;
@@ -274,6 +307,9 @@ export class DirectMessageSession {
     const ciphertextSlice = encrypted.slice(0, -16);
     const tagSlice = encrypted.slice(-16);
 
+    const pqCiphertext = this.pendingPqCiphertext;
+    this.pendingPqCiphertext = undefined; // KEM ciphertext rides the FIRST envelope only
+
     const now = Date.now();
     const ttl = options?.ttl;
     const expiresAt = ttl && ttl > 0 ? now + ttl : undefined;
@@ -287,6 +323,7 @@ export class DirectMessageSession {
         dhPublic: dhPublicStr,
         n: currentMsgNumber,
         pn: this.previousChainLength,
+        ...(pqCiphertext ? { pqCiphertext } : {}),
       },
       ciphertext: this.bufferToBase64(ciphertextSlice),
       iv: this.bufferToBase64(iv),
@@ -547,14 +584,35 @@ export class DirectMessageSession {
   private async computeX3DHSecret(
     dhA: ArrayBuffer,
     dhB: ArrayBuffer,
-    dhC: ArrayBuffer
+    dhC: ArrayBuffer,
+    pqShared?: Uint8Array<ArrayBuffer>
   ): Promise<ArrayBuffer> {
     const combinedDH = new Uint8Array([
       ...new Uint8Array(dhA),
       ...new Uint8Array(dhB),
       ...new Uint8Array(dhC),
+      ...(pqShared ?? []),
     ]);
-    return this.hkdf(combinedDH.buffer as ArrayBuffer, new Uint8Array(new ArrayBuffer(32)), this.utf8('anonchat-x3dh-v1'), 256);
+    // Distinct domains keep hybrid roots from ever colliding with classical-only roots.
+    const domain = pqShared ? 'anonchat-pqxdh-v1' : 'anonchat-x3dh-v1';
+    return this.hkdf(combinedDH.buffer as ArrayBuffer, new Uint8Array(new ArrayBuffer(32)), this.utf8(domain), 256);
+  }
+
+  private b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+    const raw = atob(b64);
+    const out = new Uint8Array(new ArrayBuffer(raw.length));
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  private bytesToB64(bytes: Uint8Array): string {
+    return btoa(String.fromCharCode(...bytes));
+  }
+
+  private copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+    const out = new Uint8Array(new ArrayBuffer(bytes.length));
+    out.set(bytes);
+    return out;
   }
 
   private async kdfRK(currentRootKey: ArrayBuffer, dhOut: ArrayBuffer): Promise<{ rootKey: ArrayBuffer; chainKey: ArrayBuffer }> {
