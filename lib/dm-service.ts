@@ -99,20 +99,35 @@ export class DirectMessageClient {
     return session;
   }
 
-  /** Initiator: send the first message to a Contact, fanning out to channel + inbox. */
+  /** Initiator: send the first message to a Contact, fanning out to channel + inbox.
+   *  If the FIRST send of a fresh session fails to deliver, the session is discarded:
+   *  the PQ/handshake material rode that envelope, so a retry must re-initiate
+   *  (otherwise the responder could never complete the handshake — #24 outbox flow). */
   async sendToContact(
     contact: Contact,
     content: string,
     ttl?: number,
     transport?: Transport,
   ): Promise<MessageEnvelope> {
+    const existingChannel = [...this.remoteIdentityByChannel.entries()].find(
+      ([, remote]) => remote.trim() === contact.identity.identityPublicKey.trim(),
+    )?.[0];
+    const fresh = !existingChannel;
     const session = await this.sessionForContact(contact);
     const envelope = await session.sendMessage(content, { ttl });
     this.rememberSent(envelope);
     if (transport) {
       const recipientInbox = await deriveInboxRoomId(contact.identity.identityPublicKey);
-      await transport(envelope.channelId, envelope);
-      await transport(recipientInbox, envelope);
+      try {
+        await transport(envelope.channelId, envelope);
+        await transport(recipientInbox, envelope);
+      } catch (e) {
+        if (fresh && !session.hasReceivedMessage()) {
+          this.sessions.delete(envelope.channelId);
+          this.remoteIdentityByChannel.delete(envelope.channelId);
+        }
+        throw e;
+      }
     }
     return envelope;
   }
@@ -250,6 +265,11 @@ export class DirectMessageClient {
     const channelId = session.getChannelId();
     if (!channelId) throw new Error('Intro channel setup failed');
     return channelId;
+  }
+
+  /** The remote identity a channel belongs to (for outbox resolution). */
+  identityForChannel(channelId: string): string | undefined {
+    return this.remoteIdentityByChannel.get(channelId);
   }
 
   /** Pairwise Channels this client has sessions on. */

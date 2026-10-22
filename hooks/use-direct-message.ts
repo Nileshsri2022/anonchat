@@ -5,11 +5,14 @@ import type { Contact } from '@/lib/contact-manager';
 import type { DecryptedMessage, MessageEnvelope } from '@/lib/direct-message-session';
 import { getDmClient } from '@/lib/dm-client-instance';
 import { isControlPayload } from '@/lib/control-payloads';
+import { getOutbox } from '@/lib/outbox';
+import { contactManager } from '@/lib/contact-manager';
 import type { DirectMessageClient } from '@/lib/dm-service';
 import { socketService } from '@/lib/socket-service';
 import { relayAPI } from '@/lib/relay-api';
 
 interface UseDirectMessageReturn {
+  outboxCount: number;
   remoteTyping: boolean;
   peerReadUpTo: number | null;
   sendTyping: () => Promise<void>;
@@ -34,6 +37,7 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
   const currentChannelRef = useRef<string | null>(null);
   const [remoteTyping, setRemoteTyping] = useState(false);
   const [peerReadUpTo, setPeerReadUpTo] = useState<number | null>(null);
+  const [outboxCount, setOutboxCount] = useState(0);
   const typingSentAtRef = useRef(0);
 
   const [currentUser] = useState(() => ({
@@ -225,6 +229,38 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
     [contact, currentUser.id, transport, appendMessage],
   );
 
+  // Flush the outbox when connectivity returns; nothing is silently dropped.
+  useEffect(() => {
+    let active = true;
+    const flush = async () => {
+      const outbox = await getOutbox();
+      if (outbox.count() === 0) return;
+      const client = await getDmClient();
+      const contactForIdentity = (identity: string): Contact | null =>
+        contactManager.getAllContacts().find((c) => c.identity.identityPublicKey.trim() === identity.trim()) ?? null;
+      await outbox.flush(async (channelId, _env, item) => {
+        if (client.channels().includes(channelId)) {
+          await client.reply(channelId, item.content);
+          return;
+        }
+        const remote = client.identityForChannel(channelId);
+        const contact = remote ? contactForIdentity(remote) : null;
+        if (!contact) throw new Error('outbox item has no resolvable conversation');
+        await client.sessionForContact(contact);
+        await client.reply(channelId, item.content);
+      });
+      if (active) setOutboxCount(outbox.count());
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', flush);
+      void flush();
+    }
+    return () => {
+      active = false;
+      if (typeof window !== 'undefined') window.removeEventListener('online', flush);
+    };
+  }, []);
+
   return {
     messages,
     isConnected,
@@ -235,5 +271,6 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
     peerReadUpTo,
     sendTyping,
     sendReadReceipt,
+    outboxCount,
   };
 }

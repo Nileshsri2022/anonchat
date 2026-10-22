@@ -12,7 +12,7 @@ Spec: issue #14. Tickets: #15–#26 (native blocking edges). Process: per-ticket
 | 07 | Typing + receipts | #21 | ✅ implemented | 0 hard · controls ride the sealed channel; receipts OFF by default + per-contact opt-in (zero leaks when off); typing throttled 2.5s | see git |
 | 08 | Names + badges | #22 | ✅ implemented | 0 hard · name INSIDE the PQ-signed material (tamper → reject); sanity limits; profile editor; intro + invite propagation | see git |
 | 09 | PWA shell | #23 | ✅ implemented | 0 hard · manifest sanity + SW network-only-API asserted by test; badge lifecycle test | see git |
-| 10 | Encrypted outbox | #24 | blocked by #16,#23 | | |
+| 10 | Encrypted outbox | #24 | ✅ implemented | 0 hard · sealed queue (same key scheme as history); flush+retry, in-order; FIXED failed-first-send killing a session (PQ ct lost) | see git |
 | 11 | Arch deepening | #25 | blocked by #18,#20 | | |
 | 12 | Golden E2E | #26 | blocked by #16–#25 | | |
 
