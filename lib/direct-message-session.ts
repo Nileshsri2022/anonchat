@@ -174,16 +174,18 @@ export class DirectMessageSession {
     let pqShared: Uint8Array<ArrayBuffer> | undefined;
     if (recipientContact.identity.pqKemPublicB64) {
       const { pqKemPublicB64, pqKemSignatureB64, identitySigningPublicKey } = recipientContact.identity;
-      if (pqKemSignatureB64 && identitySigningPublicKey) {
-        await this.verifySignatureOver(
-          identitySigningPublicKey,
-          pqKemSignatureB64,
-          new Uint8Array([
-            ...new TextEncoder().encode(PQ_SIGNATURE_DOMAIN),
-            ...this.b64ToBytes(pqKemPublicB64),
-          ]),
-        );
+      // Fail closed: a PQ key without its signature is untrusted — never encapsulate to it.
+      if (!pqKemSignatureB64 || !identitySigningPublicKey) {
+        throw new Error('PQ key present without the required signature; refusing hybrid handshake');
       }
+      await this.verifySignatureOver(
+        identitySigningPublicKey,
+        pqKemSignatureB64,
+        new Uint8Array([
+          ...new TextEncoder().encode(PQ_SIGNATURE_DOMAIN),
+          ...this.b64ToBytes(pqKemPublicB64),
+        ]),
+      );
       const encapsulated = ml_kem768.encapsulate(this.b64ToBytes(pqKemPublicB64));
       pqShared = this.copyBytes(encapsulated.sharedSecret);
       this.pendingPqCiphertext = this.bytesToB64(encapsulated.cipherText);

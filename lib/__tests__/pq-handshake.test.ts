@@ -38,6 +38,7 @@ function contactFromBundle(id: string, alias: string, bundle: IdentityBundle): C
       identitySigningPublicKey: bundle.identitySigningPublicKeySpkiB64,
       preKeySignature: bundle.preKeySignatureB64,
       pqKemPublicB64: bundle.pqKemPublicB64,
+      pqKemSignatureB64: bundle.pqKemSignatureB64,
     },
     verified: false,
     verificationCode: '',
@@ -172,15 +173,20 @@ describe('PQ hybrid handshake (ticket 15)', () => {
     const vaultB = await IdentityVault.create({ store: new MemoryKVStore(), iterations: ITERS });
     const bundleB = await exportIdentityBundle(vaultB);
 
-    // Swapped PQ key (valid base64, someone else's key) with B's signature copied —
-    // import-time validation is assumed bypassed; session init must still refuse.
+    const alice = new DirectMessageClient({ selfUserId: 'alice', vault: vaultA });
+
+    // (a) PQ key without a signature at all → refused outright
+    const contactUnsigned = contactFromBundle('cB', 'bob', bundleB);
+    contactUnsigned.identity.pqKemSignatureB64 = undefined;
+    await expect(alice.sessionForContact(contactUnsigned)).rejects.toThrow(/without the required signature/);
+
+    // (b) Swapped PQ key (someone else's) with B's signature kept — import-time
+    // validation is assumed bypassed; session init must still refuse.
     const vaultX = await IdentityVault.create({ store: new MemoryKVStore(), iterations: ITERS });
     const bundleX = await exportIdentityBundle(vaultX);
     const contactEvil = contactFromBundle('cB', 'bob', bundleB);
     contactEvil.identity.pqKemPublicB64 = bundleX.pqKemPublicB64;
-
-    const alice = new DirectMessageClient({ selfUserId: 'alice', vault: vaultA });
-    await expect(alice.sessionForContact(contactEvil)).rejects.toThrow(/PQ key signature/);
+    await expect(alice.sessionForContact(contactEvil)).rejects.toThrow(/PQ key signature verification failed/);
   });
 
   test('S3: responder without PQ capability fails closed against a hybrid initiator', async () => {
