@@ -64,6 +64,13 @@ function getCountryFlag(country?: string): string {
     return countryFlags[country] || '🌐';
 }
 
+// Never render a raw exit IP on screen (mockup 08): 185.x.y.z -> 185.•.•.•
+function maskIP(ip: string): string {
+    const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!m) return ip;
+    return m[1] + '.•.•.•';
+}
+
 export function TorCircuitDisplay() {
     const [circuit, setCircuit] = useState<CircuitInfo | null>(null);
     const [loading, setLoading] = useState(false);
@@ -176,7 +183,7 @@ export function TorCircuitDisplay() {
         >
             <span className={`w-2 h-2 rounded-full shrink-0 ${error ? 'bg-warning' : 'bg-success'}`} />
             <span className="truncate">
-                Tor circuit: {hopsLabel || exitIP} {circuitTag}
+                Tor circuit: {hopsLabel || maskIP(exitIP)} {circuitTag}
             </span>
             <RefreshCw className="w-3 h-3 ml-auto shrink-0" />
         </button>
@@ -198,7 +205,7 @@ export function TorCircuitDisplay() {
                         <p className="text-sm text-muted-foreground text-center">
                             {error || 'Loading circuit...'}
                         </p>
-                        <p className="text-sm text-center">Current IP: {exitIP}</p>
+                        <p className="text-sm text-center">Exit IP: {maskIP(exitIP)}</p>
                         <Button
                             onClick={fetchCircuitInfo}
                             className="w-full"
@@ -225,6 +232,7 @@ export function TorCircuitDisplay() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="text-sm font-bold text-foreground">
+                                                {getCountryFlag(circuit.hops.guard.country)}{' '}
                                                 {circuit.hops.guard.country && circuit.hops.guard.country !== 'Unknown'
                                                     ? circuit.hops.guard.country
                                                     : '??'}
@@ -252,6 +260,7 @@ export function TorCircuitDisplay() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="text-sm font-bold text-foreground">
+                                                {getCountryFlag(circuit.hops.middle.country)}{' '}
                                                 {circuit.hops.middle.country && circuit.hops.middle.country !== 'Unknown'
                                                     ? circuit.hops.middle.country
                                                     : '??'}
@@ -276,6 +285,7 @@ export function TorCircuitDisplay() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="text-sm font-bold text-foreground">
+                                                {getCountryFlag(circuit.hops.exit.country)}{' '}
                                                 {circuit.hops.exit.country && circuit.hops.exit.country !== 'Unknown'
                                                     ? circuit.hops.exit.country
                                                     : '??'}
@@ -298,6 +308,12 @@ export function TorCircuitDisplay() {
                                 <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                 <span className="text-sm text-muted-foreground">Internet</span>
                             </div>
+                        </div>
+
+                        {/* Exit IP row (mockup 08) */}
+                        <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-border text-sm">
+                            <span className="text-muted-foreground">Exit IP</span>
+                            <span className="font-mono text-xs">{maskIP(exitIP)}</span>
                         </div>
 
                         {/* New Circuit Button */}
