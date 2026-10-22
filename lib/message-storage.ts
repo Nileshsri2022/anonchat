@@ -198,3 +198,123 @@ class MessageStorage {
 
 export const messageStorage = new MessageStorage();
 export type { StoredMessage };
+
+// --- At-rest encryption layer (ADR-0004) -------------------------------------
+// When a storage key is provided, message bodies are persisted only as AES-GCM
+// ciphertext blobs; loading decrypts transparently. Without a key the store is
+// device-local plaintext (caveat mode shown in Settings).
+
+import type { KVStore } from './kv-store';
+import type { StoredMessage as StoredMessageType } from './message-storage';
+
+const ENC_PREFIX = 'messages:';
+const INDEX_PREFIX = 'room-index:';
+
+export interface EncryptedStorage {
+  saveMessage(message: StoredMessageType): Promise<void>;
+  getMessagesByRoom(roomId: string): Promise<StoredMessageType[]>;
+  deleteMessage(messageId: string): Promise<void>;
+  clearRoom(roomId: string): Promise<void>;
+  /** Hard-deletes expired disappearing messages from the store. Returns count. */
+  purgeExpired(roomId: string): Promise<number>;
+}
+
+function b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const raw = atob(b64);
+  const out = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function bytesToB64(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+/**
+ * Builds a storage instance over a KV seam. With `key`, each message is stored as
+ * `{ blob: iv||ciphertext }`; the room index holds message ids only. Entries that
+ * fail decryption under the current key are not surfaced.
+ */
+export function createEncryptedStorage(kv: KVStore, key: CryptoKey | null): EncryptedStorage {
+  async function encryptBody(message: StoredMessageType): Promise<Record<string, unknown>> {
+    if (!key) {
+      // Caveat mode: plaintext body, clearly marked
+      return { ...message, caveat: 'stored without encryption' };
+    }
+    const iv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(12)));
+    const plaintext = new TextEncoder().encode(JSON.stringify(message));
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+    const blob = new Uint8Array(new ArrayBuffer(12 + ciphertext.byteLength));
+    blob.set(iv, 0);
+    blob.set(new Uint8Array(ciphertext), 12);
+    return { id: message.id, roomId: message.roomId, blob: bytesToB64(blob), ts: message.timestamp };
+  }
+
+  async function decryptBody(record: Record<string, unknown>): Promise<StoredMessageType | null> {
+    if (typeof record.blob !== 'string') {
+      return record as unknown as StoredMessageType; // caveat-mode record
+    }
+    if (!key) return null; // sealed content, no key this session
+    const blob = b64ToBytes(record.blob);
+    try {
+      const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.slice(0, 12) }, key, blob.slice(12));
+      return JSON.parse(new TextDecoder().decode(plaintext)) as StoredMessageType;
+    } catch {
+      return null;
+    }
+  }
+
+  return {
+    async saveMessage(message) {
+      const record = await encryptBody(message);
+      await kv.set(ENC_PREFIX + message.id, record);
+      const indexKey = INDEX_PREFIX + message.roomId;
+      const index = ((await kv.get(indexKey)) as string[] | undefined) ?? [];
+      if (!index.includes(message.id)) index.push(message.id);
+      await kv.set(indexKey, index);
+    },
+
+    async getMessagesByRoom(roomId) {
+      const index = ((await kv.get(INDEX_PREFIX + roomId)) as string[] | undefined) ?? [];
+      const out: StoredMessageType[] = [];
+      const now = Date.now();
+      for (const id of index) {
+        const record = (await kv.get(ENC_PREFIX + id)) as Record<string, unknown> | undefined;
+        if (!record) continue;
+        const message = await decryptBody(record);
+        if (message && (!message.expiresAt || message.expiresAt > now)) out.push(message);
+      }
+      out.sort((a, b) => a.timestamp - b.timestamp);
+      return out;
+    },
+
+    async deleteMessage(messageId) {
+      await kv.delete(ENC_PREFIX + messageId);
+    },
+
+    async clearRoom(roomId) {
+      const index = ((await kv.get(INDEX_PREFIX + roomId)) as string[] | undefined) ?? [];
+      for (const id of index) await kv.delete(ENC_PREFIX + id);
+      await kv.delete(INDEX_PREFIX + roomId);
+    },
+
+    async purgeExpired(roomId) {
+      const index = ((await kv.get(INDEX_PREFIX + roomId)) as string[] | undefined) ?? [];
+      const now = Date.now();
+      let purged = 0;
+      for (const id of index) {
+        const record = (await kv.get(ENC_PREFIX + id)) as Record<string, unknown> | undefined;
+        if (!record) continue;
+        const message = await decryptBody(record);
+        if (message && message.expiresAt && message.expiresAt <= now) {
+          await kv.delete(ENC_PREFIX + id);
+          const next = index.filter((x) => x !== id);
+          await kv.set(INDEX_PREFIX + roomId, next);
+          index.splice(index.indexOf(id), 1);
+          purged++;
+        }
+      }
+      return purged;
+    },
+  };
+}

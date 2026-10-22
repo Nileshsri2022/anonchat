@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { relayAPI, RelayMessage } from '@/lib/relay-api';
 import { roomEncryption } from '@/lib/room-encryption';
 import { socketService } from '@/lib/socket-service';
-import { messageStorage, StoredMessage } from '@/lib/message-storage';
+import type { StoredMessage } from '@/lib/message-storage';
+import { getEncryptedHistoryStorage } from '@/lib/storage-key-instance';
 
 export interface Message {
   id: string;
@@ -87,9 +88,12 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
           encrypted: true,
         };
 
-        // Load stored messages from IndexedDB
+        // Load stored messages (encrypted at rest when a storage key exists, ADR-0004)
         try {
-          const storedMessages = await messageStorage.getMessagesByRoom(roomId);
+          const historyStore = await getEncryptedHistoryStorage();
+          const storedMessages = historyStore
+            ? ((await historyStore.getMessagesByRoom(roomId)) as StoredMessage[])
+            : [];
           if (storedMessages.length > 0) {
             console.log(`📦 Loaded ${storedMessages.length} messages from IndexedDB`);
             const loadedMessages: Message[] = storedMessages.map(m => ({
@@ -144,13 +148,14 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
         return filtered.length !== prev.length ? filtered : prev;
       });
 
-      // Also cleanup expired from IndexedDB
+      // Hard-delete expired disappearing messages from local storage
       try {
-        const deleted = await messageStorage.deleteExpiredMessages();
+        const store = await getEncryptedHistoryStorage();
+        const deleted = store ? await store.purgeExpired(roomId) : 0;
         if (deleted > 0) {
-          console.log(`🗑️ Cleaned ${deleted} expired message(s) from IndexedDB`);
+          console.log(`🗑️ Purged ${deleted} expired message(s) from local storage`);
         }
-      } catch (e) {
+      } catch {
         // Ignore errors
       }
     }, 5000); // Check every 5 seconds
@@ -199,18 +204,20 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
           expiresAt: msg.expiresAt,
         };
 
-        // Save to IndexedDB for persistence
-        messageStorage.saveMessage({
-          id: msg.id,
-          roomId: msg.roomId,
-          userId: msg.userId,
-          username: msg.username,
-          content: decrypted,
-          timestamp: msg.timestamp,
-          encrypted: true,
-          ip: msg.ip,
-          expiresAt: msg.expiresAt,
-        }).catch(e => console.warn('Failed to save message:', e));
+        // Persist (encrypted at rest when a storage key exists, ADR-0004)
+        getEncryptedHistoryStorage().then((store) =>
+          store?.saveMessage({
+            id: msg.id,
+            roomId: msg.roomId,
+            userId: msg.userId,
+            username: msg.username,
+            content: decrypted,
+            timestamp: msg.timestamp,
+            encrypted: true,
+            ip: msg.ip,
+            expiresAt: msg.expiresAt,
+          }).catch((e: unknown) => console.warn('Failed to save message:', e)),
+        );
 
         setMessages(prev => [...prev, newMessage]);
       } catch (error) {
@@ -289,18 +296,20 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
         ...(messageTTL > 0 && { expiresAt: now + messageTTL }),
       };
 
-      // Save to IndexedDB for persistence
-      messageStorage.saveMessage({
-        id: sendResult.messageId,
-        roomId,
-        userId: currentUser.id,
-        username: currentUser.username,
-        content: content.trim(),
-        timestamp: now,
-        encrypted: true,
-        ip: sendResult.sentFrom,
-        expiresAt: messageTTL > 0 ? now + messageTTL : undefined,
-      }).catch(e => console.warn('Failed to save message:', e));
+      // Persist (encrypted at rest when a storage key exists, ADR-0004)
+      getEncryptedHistoryStorage().then((store) =>
+        store?.saveMessage({
+          id: sendResult.messageId,
+          roomId,
+          userId: currentUser.id,
+          username: currentUser.username,
+          content: content.trim(),
+          timestamp: now,
+          encrypted: true,
+          ip: sendResult.sentFrom,
+          expiresAt: messageTTL > 0 ? now + messageTTL : undefined,
+        }).catch((e: unknown) => console.warn('Failed to save message:', e)),
+      );
 
       setMessages(prev => [...prev, newMessage]);
       lastMessageIdRef.current = relayMessage.id;

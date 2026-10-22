@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, KeyRound, Lock, LockOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getOrCreateVault } from '@/lib/vault-instance';
+import { getStorageKeyManager, resetHistoryStorage } from '@/lib/storage-key-instance';
 
 /**
  * Local-data vault controls: shows the seal state of locally stored data,
@@ -39,6 +40,8 @@ export function ProfilePassphraseSettings() {
     try {
       const vault = await getOrCreateVault();
       await vault.seal(passphrase);
+      await getStorageKeyManager().then((m) => m.seal(passphrase));
+      resetHistoryStorage();
       setPassphrase('');
       setMessage('Local data is now sealed with your Profile Passphrase');
       await refresh();
@@ -54,6 +57,8 @@ export function ProfilePassphraseSettings() {
       const vault = await getOrCreateVault();
       const ok = await vault.unlock(passphrase);
       if (ok) {
+        await getStorageKeyManager().then((m) => m.getOrCreate(passphrase));
+        resetHistoryStorage();
         setPassphrase('');
         setMessage('Local data unlocked');
       } else {
@@ -71,6 +76,8 @@ export function ProfilePassphraseSettings() {
     try {
       const vault = await getOrCreateVault();
       await vault.removePassphrase();
+      await getStorageKeyManager().then((m) => m.removeSeal(passphrase));
+      resetHistoryStorage();
       setPassphrase('');
       setMessage('Profile Passphrase removed — local data is stored without encryption again');
       await refresh();
