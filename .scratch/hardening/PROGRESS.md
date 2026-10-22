@@ -11,9 +11,9 @@ so per-ticket status lives here until it can be mirrored into the final PR.
 | 03 DM protocol core | #5 | ✅ implemented | Standards 0 hard/2 judgement (base64 helpers dup → #11) · Spec 7/7 ACs | de633ff |
 | 04 DMs live | #6 | ✅ implemented | Standards 0 hard · Spec 4/4 ACs (+2 integration bugs found & fixed) | 1956913 |
 | 05 Room Keys + Invites | #7 | ✅ implemented | Standards 0 hard · Spec 5/5 ACs | see git |
-| 06 Encrypted history | #8 | in progress | | |
-| 07 Relay hardening | #9 | pending | | |
-| 08 Privacy/build | #10 | pending | | |
+| 06 Encrypted history | #8 | ✅ implemented | Standards 0 hard · Spec 4/4 ACs | 174233f |
+| 07 Relay hardening | #9 | ✅ implemented | Standards 0 hard · Spec 8/8 ACs | see git |
+| 08 Privacy/build | #10 | in progress | | |
 | 09 Verification UX + consolidation | #11 | unblocked | | |
 | 10 Full-flow E2E | #12 | blocked by #3–#11 | | |
 
