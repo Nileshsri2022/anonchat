@@ -93,33 +93,14 @@ export class RoomEncryption {
     return decoder.decode(decrypted);
   }
 
-  // Derive room key from room ID and shared secret (SHA-256 legacy / public room)
-  async deriveRoomKey(roomId: string, sharedSecret: string): Promise<void> {
-    const encoder = new TextEncoder();
-    const keyMaterial = encoder.encode(roomId + sharedSecret);
-
-    // Hash to create consistent key material
-    const hash = await crypto.subtle.digest('SHA-256', keyMaterial);
-
-    this.roomKey = await crypto.subtle.importKey(
-      'raw',
-      hash,
-      {
-        name: 'AES-GCM',
-        length: 256,
-      },
-      true,
-      ['encrypt', 'decrypt']
-    );
-  }
-
   /**
    * Derive room key from Room Passphrase using PBKDF2 (100k iterations, SHA-256, salt=roomId).
-   * If passphrase is not provided, falls back to public room derivation ('shared-secret').
+   * Requires a Room Passphrase: random-key Rooms import their Room Key via importRoomKey
+   * instead (ADR-0003 removed the ID-derivable fallback).
    */
-  async deriveKeyFromPassphrase(roomId: string, passphrase?: string): Promise<void> {
+  async deriveKeyFromPassphrase(roomId: string, passphrase: string): Promise<void> {
     if (!passphrase || passphrase.trim() === '') {
-      return this.deriveRoomKey(roomId, 'shared-secret');
+      throw new Error('A Room Passphrase is required; random-key Rooms must import their Room Key');
     }
 
     const encoder = new TextEncoder();

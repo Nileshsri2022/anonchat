@@ -86,7 +86,7 @@ async function getTorStatus(): Promise<TorStatus> {
                     const circuitMatch = dataBuffer.match(/\d+ BUILT ([^\r\n]+)/);
                     if (circuitMatch) {
                         const hops = circuitMatch[1].split(',');
-                        console.log('[TOR-STATUS] Circuit hops:', hops);
+                        console.log('[TOR-STATUS] circuit hops established (details withheld from logs)');
 
                         // Extract node names
                         const extractNode = (hop: string): CircuitHop => {
@@ -111,17 +111,8 @@ async function getTorStatus(): Promise<TorStatus> {
                     console.error('[TOR-STATUS] Error parsing circuit:', e);
                 }
 
-                // Get exit IP
-                try {
-                    const ipResponse = await fetch('https://api.ipify.org?format=json', {
-                        signal: AbortSignal.timeout(5000),
-                    });
-                    const ipData = await ipResponse.json();
-                    status.exitIp = ipData.ip;
-                    console.log('[TOR-STATUS] Server IP:', status.exitIp);
-                } catch {
-                    console.log('[TOR-STATUS] Could not get exit IP');
-                }
+                // Exit IP is deliberately NOT fetched: third-party IP echo services
+                // would learn the lookup. The Tor control port data above is enough.
 
                 socket.end();
                 resolve(status);

@@ -1,4 +1,3 @@
-export * from './crypto';
 export * from './contact-manager';
 export * from './direct-message-session';
 export * from './identity-service';
@@ -7,8 +6,4 @@ export * from './room-encryption';
 export * from './socket-service';
 export * from './message-storage';
 export * from './tor-integration';
-export * from './x3dh-handshake';
-export { DoubleRatchetAlgorithm } from './double-ratchet-enhanced';
 export * from './api-client';
-export { MessageEncryption } from './message-encryption';
-export { SessionManager } from './session-manager';

@@ -9,11 +9,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, Users, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { RoomEncryption, roomEncryption } from '@/lib/room-encryption';
 import { relayAPI } from '@/lib/relay-api';
+import { createRoomKey, serializeRoomInvite, parseRoomInvite } from '@/lib/room-invite';
 
 interface RoomJoinModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onJoinRoom: (roomId: string, roomName: string, isNewRoom: boolean, isProtected?: boolean, passphrase?: string) => void;
+  onJoinRoom: (roomId: string, roomName: string, isNewRoom: boolean, isProtected?: boolean, passphrase?: string, roomKeyB64?: string) => void;
 }
 
 export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProps) {
@@ -25,6 +26,7 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
   const [newRoomName, setNewRoomName] = useState('');
   const [createPassphrase, setCreatePassphrase] = useState('');
   const [showCreatePassphrase, setShowCreatePassphrase] = useState(false);
+  const [roomInvite, setRoomInvite] = useState('');
 
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -51,12 +53,30 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
       });
 
       if (res.roomId) {
+        // Random-key Room (ADR-0003): the key is generated here and travels only in the Invite.
+        let roomKeyB64: string | undefined;
+        if (!hasPassphrase) {
+          roomKeyB64 = await createRoomKey();
+          await roomEncryption.importRoomKey(roomKeyB64);
+        }
+        const invite = serializeRoomInvite({
+          roomId: res.roomId,
+          roomName: newRoomName.trim() || 'My Room',
+          keyB64: roomKeyB64,
+          isProtected: hasPassphrase,
+        });
+        try {
+          await navigator.clipboard.writeText(invite);
+        } catch {
+          // Clipboard may be unavailable; the invite is also shown by the info panel
+        }
         onJoinRoom(
           res.roomId,
           newRoomName.trim() || 'My Room',
           true,
           hasPassphrase,
-          hasPassphrase ? createPassphrase.trim() : undefined
+          hasPassphrase ? createPassphrase.trim() : undefined,
+          roomKeyB64
         );
         setNewRoomName('');
         setCreatePassphrase('');
@@ -109,12 +129,26 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
         }
       }
 
+      // An imported Room Invite carries the Room Key for random-key Rooms
+      let importedRoomKey: string | undefined;
+      try {
+        const storedInvite = typeof window !== 'undefined' ? localStorage.getItem('pending_room_invite') : null;
+        if (storedInvite) {
+          const parsed = parseRoomInvite(storedInvite);
+          if (parsed.roomId === cleanRoomId && parsed.keyB64) importedRoomKey = parsed.keyB64;
+          localStorage.removeItem('pending_room_invite');
+        }
+      } catch {
+        // Ignore malformed pending invites
+      }
+
       onJoinRoom(
         cleanRoomId,
         joinResult.name || roomName.trim() || `Room ${cleanRoomId.slice(0, 6)}`,
         false,
         Boolean(joinResult.isProtected),
-        joinPassphrase.trim() || undefined
+        joinPassphrase.trim() || undefined,
+        importedRoomKey
       );
 
       setRoomId('');
@@ -155,6 +189,48 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
           </TabsList>
 
           <TabsContent value="join" className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="roomInvite">Join with Invite (recommended)</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="roomInvite"
+                  placeholder="anonchat-room-invite-v1:…"
+                  value={roomInvite}
+                  onChange={(e) => {
+                    setRoomInvite(e.target.value);
+                    setError(null);
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    try {
+                      const parsed = parseRoomInvite(roomInvite.trim());
+                      if (parsed.isProtected) {
+                        setRoomId(parsed.roomId);
+                        setRoomName(parsed.roomName);
+                        setError('This Room needs its Room Passphrase — enter it below.');
+                      } else if (parsed.keyB64) {
+                        localStorage.setItem('pending_room_invite', roomInvite.trim());
+                        setRoomId(parsed.roomId);
+                        setRoomName(parsed.roomName);
+                        setError(null);
+                      } else {
+                        setError('This Invite carries no Room Key and is not passphrase-protected.');
+                      }
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Invalid Room Invite');
+                    }
+                  }}
+                >
+                  Use
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                An Invite carries the Room Key out-of-band. A Room ID alone grants discovery, not readability.
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="roomId">Room ID</Label>
               <Input

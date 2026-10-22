@@ -577,17 +577,10 @@ export class TorIntegration {
   /**
    * Fallback GeoIP lookup using external API
    */
-  private async getCountryFromAPI(ip: string): Promise<string | undefined> {
-    try {
-      const response = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`);
-      const data = await response.json();
-      if (data.countryCode) {
-        console.log(`      ✅ Country resolved from API: ${data.countryCode}`);
-        return data.countryCode;
-      }
-    } catch (error: any) {
-      console.log(`      ❌ Fallback GeoIP API failed: ${error.message}`);
-    }
+  // Third-party GeoIP lookups were removed (ticket 08): an anonymity app must not
+  // ask external services about its own circuits. Country stays undefined when the
+  // Tor control port cannot answer.
+  private async getCountryFromAPI(_ip: string): Promise<string | undefined> {
     return undefined;
   }
 

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Contact } from '@/lib/contact-manager';
-import { DirectMessageSession, type DecryptedMessage, type MessageEnvelope } from '@/lib/direct-message-session';
-import { generateEphemeralKeys, getOrCreateIdentityKeys } from '@/lib/crypto';
+import type { DecryptedMessage, MessageEnvelope } from '@/lib/direct-message-session';
+import { getDmClient } from '@/lib/dm-client-instance';
+import type { DirectMessageClient } from '@/lib/dm-service';
 import { socketService } from '@/lib/socket-service';
 import { relayAPI } from '@/lib/relay-api';
 
@@ -15,17 +16,59 @@ interface UseDirectMessageReturn {
   safetyNumber: string;
 }
 
+function isEnvelope(raw: unknown): raw is MessageEnvelope {
+  const e = raw as MessageEnvelope;
+  return Boolean(e && e.header && typeof e.ciphertext === 'string' && typeof e.channelId === 'string');
+}
+
 export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
   const [messages, setMessages] = useState<DecryptedMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [safetyNumber, setSafetyNumber] = useState(contact.identity.fingerprint);
-  const sessionRef = useRef<DirectMessageSession | null>(null);
-  const channelIdRef = useRef<string | null>(null);
+  const clientRef = useRef<DirectMessageClient | null>(null);
 
   const [currentUser] = useState(() => ({
-    id: typeof window !== 'undefined' ? localStorage.getItem('anonchat_userid') || `user_${Math.random().toString(36).substr(2, 9)}` : 'user_default',
+    id: typeof window !== 'undefined' ? localStorage.getItem('anonchat_userid') || `user_${Math.random().toString(36).slice(2, 11)}` : 'user_default',
     username: typeof window !== 'undefined' ? localStorage.getItem('anonchat_username') || `User${Math.floor(Math.random() * 9999)}` : 'User',
   }));
+
+  const appendMessage = useCallback((decrypted: DecryptedMessage) => {
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === decrypted.id)) return prev;
+      return [...prev, decrypted];
+    });
+  }, []);
+
+  /** Deliver an envelope through both transports: socket push + relay REST buffer. */
+  const transport = useCallback(async (roomId: string, envelope: MessageEnvelope) => {
+    socketService.sendMessage(roomId, envelope);
+    try {
+      await relayAPI.sendMessage({
+        id: `${roomId}_${envelope.timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+        roomId,
+        userId: currentUser.id,
+        username: currentUser.username,
+        timestamp: envelope.timestamp,
+        expiresAt: envelope.expiresAt,
+        ...(envelope as unknown as Record<string, unknown>),
+      } as never);
+    } catch {
+      // Socket push already covers live recipients; the relay buffer is best-effort
+    }
+  }, [currentUser.id]);
+
+  /** Handle one inbound raw relay/socket object. */
+  const acceptInbound = useCallback(async (raw: unknown) => {
+    const client = clientRef.current;
+    if (!client || !isEnvelope(raw)) return;
+    if ((raw as MessageEnvelope).senderId === currentUser.id) return;
+    try {
+      const decrypted = await client.handleInboundEnvelope(raw as MessageEnvelope);
+      if (decrypted) appendMessage(decrypted);
+    } catch (err) {
+      console.error('Failed to decrypt inbound DM envelope:', err);
+    }
+  }, [appendMessage, currentUser.id]);
 
   // Disappearing messages cleanup ticker
   useEffect(() => {
@@ -36,83 +79,71 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
     return () => clearInterval(interval);
   }, []);
 
-  // Initialize DM Session & Socket
+  // Initialize the DM client, subscribe channel + inbox, start catch-up polling
   useEffect(() => {
     let active = true;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    const seenEnvelopes = new Set<string>();
 
-    async function setupSession(): Promise<(() => void) | undefined> {
-      try {
-        const selfIdentityKeys = await getOrCreateIdentityKeys();
-        const selfPreKeys = await generateEphemeralKeys();
+    async function setup(): Promise<(() => void) | undefined> {
+      const client = await getDmClient();
+      if (!active) return;
+      clientRef.current = client;
 
-        const session = new DirectMessageSession({
-          selfUserId: currentUser.id,
-          selfIdentityKeys,
-          selfPreKeys: {
-            id: 1,
-            publicKey: selfPreKeys.publicKey,
-            privateKey: selfPreKeys.privateKey,
-          },
-        });
+      // Establish (or reuse) the Initiator session toward this Contact
+      await client.sessionForContact(contact);
+      if (!active) return;
+      setSafetyNumber(contact.identity.fingerprint);
 
-        await session.initiate(contact);
-        const channelId = session.getChannelId();
+      socketService.connect();
+      setIsConnected(true);
 
-        if (!active || !channelId) return;
+      const handleRaw = (raw: unknown) => {
+        const env = raw as MessageEnvelope;
+        if (!isEnvelope(env)) return;
+        const key = `${env.channelId}:${env.header.n}:${env.timestamp}`;
+        if (seenEnvelopes.has(key)) return;
+        seenEnvelopes.add(key);
+        void acceptInbound(raw);
+      };
+      socketService.onMessage('*', handleRaw);
 
-        sessionRef.current = session;
-        channelIdRef.current = channelId;
-        setSafetyNumber(session.getSafetyNumber());
-
-        // Connect Socket.IO to Pairwise Channel
-        socketService.connect();
-        socketService.joinRoom(channelId, currentUser.id, currentUser.username);
-        setIsConnected(true);
-
-        // Fetch any buffered messages from relay
-        try {
-          const buffered = await relayAPI.pollMessages(channelId);
-          for (const raw of buffered) {
-            if ((raw as any).header && raw.userId !== currentUser.id) {
-              const decrypted = await session.receiveEnvelope(raw as unknown as MessageEnvelope);
-              if (active) {
-                setMessages((prev) => {
-                  if (prev.some((m) => m.id === decrypted.id)) return prev;
-                  return [...prev, decrypted];
-                });
-              }
-            }
-          }
-        } catch {
-          // Relay buffer is optional
-        }
-
-        // Listen for real-time messages on Pairwise Channel
-        socketService.onMessage(channelId, async (msg: any) => {
-          if (!active || !sessionRef.current) return;
-          if (msg.channelId === channelId && msg.senderId !== currentUser.id && msg.header) {
-            try {
-              const decrypted = await sessionRef.current.receiveEnvelope(msg as MessageEnvelope);
-              setMessages((prev) => {
-                if (prev.some((m) => m.id === decrypted.id)) return prev;
-                return [...prev, decrypted];
-              });
-            } catch (err) {
-              console.error('Failed to decrypt incoming DM envelope:', err);
-            }
-          }
-        });
-
-        return () => {
-          socketService.leaveRoom(channelId, currentUser.id);
-        };
-      } catch (err) {
-        console.error('Failed to establish Direct Message session:', err);
-        return undefined;
+      // Subscribe: the Pairwise Channel with this Contact + our deterministic inbox
+      const rooms = await client.pollableRooms();
+      if (!active) return;
+      for (const room of rooms) {
+        socketService.joinRoom(room, currentUser.id, currentUser.username);
       }
+
+      // Catch-up polling: drains envelopes sent while we were away (incl. first contact)
+      const lastSeen = new Map<string, string | undefined>();
+      const poll = async () => {
+        if (!active) return;
+        const clientNow = clientRef.current;
+        if (!clientNow) return;
+        for (const room of await clientNow.pollableRooms()) {
+          try {
+            const buffered = await relayAPI.pollMessages(room, lastSeen.get(room));
+            for (const raw of buffered) {
+              if (!isEnvelope(raw)) continue;
+              lastSeen.set(room, `${raw.channelId}:${raw.header.n}:${raw.timestamp}`);
+              await acceptInbound(raw);
+            }
+          } catch {
+            // Relay buffer is optional
+          }
+        }
+      };
+      await poll();
+      pollTimer = setInterval(poll, 5000);
+
+      return () => {
+        if (pollTimer) clearInterval(pollTimer);
+        socketService.leaveRoom(contact.identity.identityPublicKey, currentUser.id);
+      };
     }
 
-    const cleanupPromise = setupSession();
+    const cleanupPromise = setup();
 
     return () => {
       active = false;
@@ -120,49 +151,32 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
         if (typeof cleanup === 'function') cleanup();
       });
     };
-  }, [contact, currentUser]);
+  }, [contact, currentUser.id, acceptInbound]);
 
   const sendMessage = useCallback(
     async (content: string, ttl?: number) => {
-      if (!sessionRef.current || !channelIdRef.current) {
+      const client = clientRef.current;
+      if (!client) {
         throw new Error('Direct message session is not initialized');
       }
 
-      const envelope = await sessionRef.current.sendMessage(content, { ttl });
+      // First send acts as Initiator from the Contact's Identity Bundle; later sends
+      // reuse the established session. Envelopes fan out to channel + recipient inbox.
+      await client.sendToContact(contact, content, ttl, transport);
 
-      // Append locally
+      // Optimistic local echo
       const localMsg: DecryptedMessage = {
-        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        channelId: channelIdRef.current,
+        id: `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        channelId: contact.identity.identityPublicKey,
         senderId: currentUser.id,
         content,
-        timestamp: envelope.timestamp,
-        ttl: envelope.ttl,
-        expiresAt: envelope.expiresAt,
+        timestamp: Date.now(),
+        ttl,
+        expiresAt: ttl && ttl > 0 ? Date.now() + ttl : undefined,
       };
-      setMessages((prev) => [...prev, localMsg]);
-
-      // Broadcast over Socket.IO Pairwise Channel
-      socketService.sendMessage(channelIdRef.current, envelope);
-
-      // Also publish to relay REST endpoint for offline/buffering
-      try {
-        await relayAPI.sendMessage({
-          id: envelope.channelId + '_' + envelope.timestamp,
-          roomId: channelIdRef.current,
-          userId: currentUser.id,
-          username: currentUser.username,
-          encryptedContent: envelope.ciphertext,
-          iv: envelope.iv,
-          timestamp: envelope.timestamp,
-          expiresAt: envelope.expiresAt,
-          ...(envelope as any),
-        });
-      } catch {
-        // Broadcast over socket already succeeded
-      }
+      appendMessage(localMsg);
     },
-    [currentUser]
+    [contact, currentUser.id, transport, appendMessage],
   );
 
   return {

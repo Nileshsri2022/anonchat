@@ -3,28 +3,45 @@ import { DirectMessageSession, derivePairwiseChannelId } from '../direct-message
 import { generateIdentityKeys, generateEphemeralKeys } from '../crypto';
 import type { Contact } from '../contact-manager';
 
+/** Builds Bob's side: identity keys, pre-keys, and a signed Contact bundle (as an Invite would carry). */
+async function makeBobBundle() {
+  const bobIdentityKeys = await generateIdentityKeys();
+  const bobPreKeys = await generateEphemeralKeys();
+  const bobSigning = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const preKeySpkiB64 = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('spki', bobPreKeys.publicKey))));
+  const signingSpkiB64 = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('spki', bobSigning.publicKey))));
+  const preKeySignature = btoa(String.fromCharCode(...new Uint8Array(
+    await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      bobSigning.privateKey,
+      Uint8Array.from(atob(preKeySpkiB64), (c) => c.charCodeAt(0)),
+    ),
+  )));
+  const bobContact: Contact = {
+    id: 'contact_bob_123',
+    alias: 'Bob',
+    identity: {
+      id: 'user_bob',
+      identityPublicKey: JSON.stringify(await crypto.subtle.exportKey('jwk', bobIdentityKeys.publicKey)),
+      preKeyPublic: JSON.stringify(await crypto.subtle.exportKey('jwk', bobPreKeys.publicKey)),
+      preKeyId: 1,
+      fingerprint: 'bob-fingerprint-1234',
+      identitySigningPublicKey: signingSpkiB64,
+      preKeySignature,
+    },
+    verified: true,
+    verificationCode: '123456',
+    addedAt: new Date(),
+    encryptionStatus: 'verified',
+  };
+  return { bobIdentityKeys, bobPreKeys, bobContact };
+}
+
+
 describe('DirectMessageSession - Slice 1: Handshake & First Message', () => {
   test('Alice initiates session with Bob and Bob decrypts the first message envelope', async () => {
     // 1. Setup Bob's identity and pre-key (as would be scanned from QR)
-    const bobIdentityKeys = await generateIdentityKeys();
-    const bobPreKeys = await generateEphemeralKeys();
-
-    // Export Bob's public keys to string/format as stored in Contact
-    const bobContact: Contact = {
-      id: 'contact_bob_123',
-      alias: 'Bob',
-      identity: {
-        id: 'user_bob',
-        identityPublicKey: JSON.stringify(await crypto.subtle.exportKey('jwk', bobIdentityKeys.publicKey)),
-        preKeyPublic: JSON.stringify(await crypto.subtle.exportKey('jwk', bobPreKeys.publicKey)),
-        preKeyId: 1,
-        fingerprint: 'bob-fingerprint-1234',
-      },
-      verified: true,
-      verificationCode: '123456',
-      addedAt: new Date(),
-      encryptionStatus: 'verified',
-    };
+    const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
 
     // Alice's own identity keys
     const aliceIdentityKeys = await generateIdentityKeys();
@@ -66,24 +83,7 @@ describe('DirectMessageSession - Slice 1: Handshake & First Message', () => {
 
 describe('DirectMessageSession - Slice 2: Bidirectional Ratcheting & Turn Taking', () => {
   test('Alice and Bob exchange multiple messages with DH ratchet rotations', async () => {
-    const bobIdentityKeys = await generateIdentityKeys();
-    const bobPreKeys = await generateEphemeralKeys();
-
-    const bobContact: Contact = {
-      id: 'contact_bob_123',
-      alias: 'Bob',
-      identity: {
-        id: 'user_bob',
-        identityPublicKey: JSON.stringify(await crypto.subtle.exportKey('jwk', bobIdentityKeys.publicKey)),
-        preKeyPublic: JSON.stringify(await crypto.subtle.exportKey('jwk', bobPreKeys.publicKey)),
-        preKeyId: 1,
-        fingerprint: 'bob-fingerprint-1234',
-      },
-      verified: true,
-      verificationCode: '123456',
-      addedAt: new Date(),
-      encryptionStatus: 'verified',
-    };
+    const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
 
     const aliceIdentityKeys = await generateIdentityKeys();
     const aliceSession = new DirectMessageSession({
@@ -126,24 +126,7 @@ describe('DirectMessageSession - Slice 2: Bidirectional Ratcheting & Turn Taking
 
 describe('DirectMessageSession - Slice 3: Out-of-Order Delivery & Skipped-Key Cache', () => {
   test('Bob receives delayed and out-of-order messages correctly using skipped-key cache', async () => {
-    const bobIdentityKeys = await generateIdentityKeys();
-    const bobPreKeys = await generateEphemeralKeys();
-
-    const bobContact: Contact = {
-      id: 'contact_bob_123',
-      alias: 'Bob',
-      identity: {
-        id: 'user_bob',
-        identityPublicKey: JSON.stringify(await crypto.subtle.exportKey('jwk', bobIdentityKeys.publicKey)),
-        preKeyPublic: JSON.stringify(await crypto.subtle.exportKey('jwk', bobPreKeys.publicKey)),
-        preKeyId: 1,
-        fingerprint: 'bob-fingerprint-1234',
-      },
-      verified: true,
-      verificationCode: '123456',
-      addedAt: new Date(),
-      encryptionStatus: 'verified',
-    };
+    const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
 
     const aliceIdentityKeys = await generateIdentityKeys();
     const aliceSession = new DirectMessageSession({
@@ -206,24 +189,7 @@ describe('DirectMessageSession - Slice 4: Pairwise Channel ID & Disappearing Mes
   });
 
   test('Envelope and decrypted message carry synchronized TTL and expiresAt timestamps', async () => {
-    const bobIdentityKeys = await generateIdentityKeys();
-    const bobPreKeys = await generateEphemeralKeys();
-
-    const bobContact: Contact = {
-      id: 'contact_bob_123',
-      alias: 'Bob',
-      identity: {
-        id: 'user_bob',
-        identityPublicKey: JSON.stringify(await crypto.subtle.exportKey('jwk', bobIdentityKeys.publicKey)),
-        preKeyPublic: JSON.stringify(await crypto.subtle.exportKey('jwk', bobPreKeys.publicKey)),
-        preKeyId: 1,
-        fingerprint: 'bob-fingerprint-1234',
-      },
-      verified: true,
-      verificationCode: '123456',
-      addedAt: new Date(),
-      encryptionStatus: 'verified',
-    };
+    const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
 
     const aliceIdentityKeys = await generateIdentityKeys();
     const aliceSession = new DirectMessageSession({
@@ -253,5 +219,159 @@ describe('DirectMessageSession - Slice 4: Pairwise Channel ID & Disappearing Mes
     expect(decrypted.ttl).toBe(ttlMs);
     expect(decrypted.expiresAt).toBe(envelope.expiresAt);
     expect(decrypted.content).toBe('Secret self-destructing message');
+  });
+});
+
+describe('DirectMessageSession - Ticket 03: Protocol Hardening', () => {
+  test('initiate rejects a Contact whose Pre-Key signature is missing or invalid', async () => {
+    const { generateEphemeralKeys } = await import('../crypto');
+    const { DirectMessageSession } = await import('../direct-message-session');
+
+    const crypto = globalThis.crypto;
+    const aliceKeys = await generateEphemeralKeys();
+
+    // Bob's real key material with a signing pair
+    const bobIdentity = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const bobPreKey = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const bobSigning = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const preKeySpki = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('spki', bobPreKey.publicKey))));
+    const signingSpki = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('spki', bobSigning.publicKey))));
+    const goodSig = btoa(String.fromCharCode(...new Uint8Array(
+      await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, bobSigning.privateKey,
+        Uint8Array.from(atob(preKeySpki), (c) => c.charCodeAt(0))),
+    )));
+    const badSig = btoa(String.fromCharCode(...new Uint8Array(await crypto.getRandomValues(new Uint8Array(64)))));
+
+    const mkContact = async (signature?: string) => ({
+      id: 'c1',
+      alias: 'Bob',
+      identity: {
+        id: 'user_bob',
+        identityPublicKey: JSON.stringify(await crypto.subtle.exportKey('jwk', bobIdentity.publicKey)),
+        preKeyPublic: preKeySpki,
+        preKeyId: 1,
+        fingerprint: 'bob-fp',
+        identitySigningPublicKey: signingSpki,
+        preKeySignature: signature,
+      },
+      verified: false,
+      verificationCode: '',
+      addedAt: new Date(),
+      encryptionStatus: 'pending',
+    }) as any;
+
+    // Valid signature → accepted (session established)
+    const ok = new DirectMessageSession({ selfUserId: 'alice', selfIdentityKeys: aliceKeys });
+    await ok.initiate(await mkContact(goodSig));
+    expect(ok.getChannelId()).toBeDefined();
+
+    // Missing signature → rejected
+    const missing = new DirectMessageSession({ selfUserId: 'alice', selfIdentityKeys: await generateEphemeralKeys() });
+    await expect(missing.initiate(await mkContact(undefined))).rejects.toThrow(/signature/i);
+
+    // Invalid signature → rejected
+    const invalid = new DirectMessageSession({ selfUserId: 'alice', selfIdentityKeys: await generateEphemeralKeys() });
+    await expect(invalid.initiate(await mkContact(badSig))).rejects.toThrow(/signature/i);
+  });
+});
+
+describe('DirectMessageSession - Ticket 03: Replay & Tamper', () => {
+  test('a replayed envelope is rejected with an explicit replay error', async () => {
+    const { DirectMessageSession } = await import('../direct-message-session');
+    const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
+    const aliceKeys = await generateIdentityKeys();
+
+    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys });
+    await aliceSession.initiate(bobContact);
+
+    const bobSession = new DirectMessageSession({
+      selfUserId: 'user_bob',
+      selfIdentityKeys: bobIdentityKeys,
+      selfPreKeys: { id: 1, publicKey: bobPreKeys.publicKey, privateKey: bobPreKeys.privateKey },
+    });
+
+    const envelope = await aliceSession.sendMessage('first');
+    await bobSession.receiveEnvelope(envelope); // first delivery succeeds
+
+    // Replaying the exact same envelope must be rejected
+    await expect(bobSession.receiveEnvelope(envelope)).rejects.toThrow(/replay/i);
+  });
+});
+
+describe('DirectMessageSession - Ticket 03: Header Authentication', () => {
+  test('an envelope with a tampered Pairwise Channel ID fails authentication', async () => {
+    const { DirectMessageSession } = await import('../direct-message-session');
+    const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
+    const aliceKeys = await generateIdentityKeys();
+
+    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys });
+    await aliceSession.initiate(bobContact);
+    const envelope = await aliceSession.sendMessage('context switching attack?');
+
+    const bobSession = new DirectMessageSession({
+      selfUserId: 'user_bob',
+      selfIdentityKeys: bobIdentityKeys,
+      selfPreKeys: { id: 1, publicKey: bobPreKeys.publicKey, privateKey: bobPreKeys.privateKey },
+    });
+
+    const tampered = { ...envelope, channelId: 'dm_0000000000000000000000000000000000000000000000000000000000000000' };
+    await expect(bobSession.receiveEnvelope(tampered)).rejects.toThrow(/authenticat|tamper|fail/i);
+  });
+
+  test('an envelope with tampered ciphertext fails authentication', async () => {
+    const { DirectMessageSession } = await import('../direct-message-session');
+    const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
+    const aliceKeys = await generateIdentityKeys();
+
+    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys });
+    await aliceSession.initiate(bobContact);
+    const envelope = await aliceSession.sendMessage('do not modify me');
+
+    const bobSession = new DirectMessageSession({
+      selfUserId: 'user_bob',
+      selfIdentityKeys: bobIdentityKeys,
+      selfPreKeys: { id: 1, publicKey: bobPreKeys.publicKey, privateKey: bobPreKeys.privateKey },
+    });
+
+    const flipped = atob(envelope.ciphertext);
+    const flippedByte = String.fromCharCode(flipped.charCodeAt(0) ^ 0x01) + flipped.slice(1);
+    const tampered = { ...envelope, ciphertext: btoa(flippedByte) };
+    await expect(bobSession.receiveEnvelope(tampered)).rejects.toThrow();
+  });
+});
+
+describe('DirectMessageSession - Ticket 03: Skipped-Key Cache bound', () => {
+  test('the Skipped-Key Cache is bounded: keys evicted past the bound fail explicitly', async () => {
+    const { DirectMessageSession } = await import('../direct-message-session');
+    const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
+    const aliceKeys = await generateIdentityKeys();
+
+    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys });
+    await aliceSession.initiate(bobContact);
+
+    const bobSession = new DirectMessageSession({
+      selfUserId: 'user_bob',
+      selfIdentityKeys: bobIdentityKeys,
+      selfPreKeys: { id: 1, publicKey: bobPreKeys.publicKey, privateKey: bobPreKeys.privateKey },
+      maxSkippedKeys: 5,
+    });
+
+    // Alice sends 6 messages; Bob receives them in reverse (all skipped initially)
+    const envelopes = [];
+    for (let i = 1; i <= 7; i++) envelopes.push(await aliceSession.sendMessage(`msg-${i}`));
+
+    const outcomes: string[] = [];
+    for (const env of [...envelopes].reverse()) {
+      try {
+        await bobSession.receiveEnvelope(env);
+        outcomes.push('ok');
+      } catch (e) {
+        outcomes.push(e instanceof Error ? e.message : 'unknown');
+      }
+    }
+
+    // Exactly the oldest (evicted) message must fail, and it must fail loudly
+    expect(outcomes.filter((o) => o === 'ok').length).toBe(6);
+    expect(outcomes[6]).toMatch(/skip/i);
   });
 });

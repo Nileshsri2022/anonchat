@@ -1,6 +1,16 @@
 import { webcrypto } from 'crypto';
 import type { Contact } from './contact-manager';
-import type { IdentityKeys, PreKeys } from './crypto';
+
+export interface IdentityKeys {
+  publicKey: CryptoKey;
+  privateKey: CryptoKey;
+}
+
+export interface PreKeys {
+  id: number;
+  publicKey: CryptoKey;
+  privateKey: CryptoKey;
+}
 
 const crypto = globalThis.crypto || webcrypto;
 
@@ -36,6 +46,8 @@ export interface DirectMessageSessionConfig {
   selfUserId: string;
   selfIdentityKeys: IdentityKeys;
   selfPreKeys?: PreKeys;
+  /** Upper bound for the Skipped-Key Cache (default 1000). */
+  maxSkippedKeys?: number;
 }
 
 /**
@@ -65,6 +77,7 @@ export class DirectMessageSession {
   private sendDH?: CryptoKeyPair;
   private remoteDHPublic?: CryptoKey;
   private remoteDHPublicRaw?: string;
+  private recipientIdentityPublicCanonical?: string;
 
   private sendMessageNumber = 0;
   private recvMessageNumber = 0;
@@ -72,7 +85,11 @@ export class DirectMessageSession {
 
   // Skipped-key cache for out-of-order message delivery (max 1000 keys)
   private skippedKeys = new Map<string, ArrayBuffer>();
-  private readonly MAX_SKIPPED_KEYS = 1000;
+  private readonly MAX_SKIPPED_KEYS: number;
+
+  // Consumed (dhPublic, message-number) pairs, bounded — replays are rejected outright
+  private consumedKeys = new Set<string>();
+  private readonly MAX_CONSUMED_KEYS = 5000;
 
   private history: DecryptedMessage[] = [];
 
@@ -80,6 +97,7 @@ export class DirectMessageSession {
     this.selfUserId = config.selfUserId;
     this.selfIdentityKeys = config.selfIdentityKeys;
     this.selfPreKeys = config.selfPreKeys;
+    this.MAX_SKIPPED_KEYS = config.maxSkippedKeys ?? 1000;
   }
 
   getChannelId(): string | undefined {
@@ -109,6 +127,10 @@ export class DirectMessageSession {
 
     const remoteIdentityKey = await this.importKeyFromString(recipientContact.identity.identityPublicKey, 'public');
     const remotePreKey = await this.importKeyFromString(recipientContact.identity.preKeyPublic, 'public');
+
+    // Verify the Contact's Pre-Key signature before using the Pre-Key (ADR-0005).
+    await this.verifyPreKeySignature(recipientContact, remotePreKey);
+    this.recipientIdentityPublicCanonical = await this.exportKeyToString(remoteIdentityKey);
 
     // Generate Alice's initial DH keypair
     this.sendDH = await crypto.subtle.generateKey(
@@ -160,6 +182,7 @@ export class DirectMessageSession {
 
     const remoteIdentityKey = await this.importKeyFromString(envelope.senderIdentityPublic, 'public');
     const remoteDH = await this.importKeyFromString(envelope.header.dhPublic, 'public');
+    this.recipientIdentityPublicCanonical = await this.exportKeyToString(remoteIdentityKey);
 
     // Bob X3DH:
     const dhPreKeyIdentity = await crypto.subtle.deriveBits(
@@ -237,8 +260,13 @@ export class DirectMessageSession {
       ['encrypt']
     );
 
+    const dhPublicStr = await this.exportKeyToString(this.sendDH.publicKey);
+    const selfIdPublicStr = await this.exportKeyToString(this.selfIdentityKeys.publicKey);
+
+    // Bind the wire context (channel + both identities) into the ciphertext (ADR-0005)
+    const aad = await this.envelopeAad(this.channelId, selfIdPublicStr, this.recipientIdentityPublicCanonical);
     const encrypted = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv, additionalData: aad },
       aesKey,
       plaintextBytes
     );
@@ -246,15 +274,12 @@ export class DirectMessageSession {
     const ciphertextSlice = encrypted.slice(0, -16);
     const tagSlice = encrypted.slice(-16);
 
-    const dhPublicStr = await this.exportKeyToString(this.sendDH.publicKey);
-    const selfIdPublicStr = await this.exportKeyToString(this.selfIdentityKeys.publicKey);
-
     const now = Date.now();
     const ttl = options?.ttl;
     const expiresAt = ttl && ttl > 0 ? now + ttl : undefined;
 
     const envelope: MessageEnvelope = {
-      version: 1,
+      version: 2,
       channelId: this.channelId,
       senderId: this.selfUserId,
       senderIdentityPublic: selfIdPublicStr,
@@ -289,10 +314,20 @@ export class DirectMessageSession {
    * Receive and decrypt an envelope
    */
   async receiveEnvelope(envelope: MessageEnvelope): Promise<DecryptedMessage> {
+    if (envelope.version !== 2) {
+      throw new Error(`Unsupported Message Envelope version: ${envelope.version}`);
+    }
+
     await this.ensureResponderInitialized(envelope);
 
     const dhKeyId = envelope.header.dhPublic;
     const msgNum = envelope.header.n;
+
+    // Replay protection: an already-consumed (dhPublic, n) pair is rejected outright
+    const consumedKey = `${dhKeyId}:${msgNum}`;
+    if (this.consumedKeys.has(consumedKey)) {
+      throw new Error(`Replayed message rejected (n=${msgNum} of this chain already consumed)`);
+    }
 
     // Check if we previously skipped and cached this key
     const cacheKey = `${dhKeyId}:${msgNum}`;
@@ -300,6 +335,8 @@ export class DirectMessageSession {
 
     if (messageKey) {
       this.skippedKeys.delete(cacheKey);
+    } else if (this.remoteDHPublicRaw === dhKeyId && msgNum < this.recvMessageNumber) {
+      throw new Error(`Skipped key evicted or already consumed (n=${msgNum} is below the receive pointer)`);
     } else {
       // Check if DH ratchet step is needed (peer rotated their DH public key)
       if (this.remoteDHPublicRaw && envelope.header.dhPublic !== this.remoteDHPublicRaw) {
@@ -339,13 +376,24 @@ export class DirectMessageSession {
       ['decrypt']
     );
 
+    // Recompute the wire-context AAD from the envelope and our own identity
+    const selfIdPublicStr = await this.exportKeyToString(this.selfIdentityKeys.publicKey);
+    const aad = await this.envelopeAad(envelope.channelId, envelope.senderIdentityPublic, selfIdPublicStr);
+
     const decryptedBytes = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: new Uint8Array(ivBytes) },
+      { name: 'AES-GCM', iv: new Uint8Array(ivBytes), additionalData: aad },
       aesKey,
       combinedEncrypted
     );
 
     const content = new TextDecoder().decode(decryptedBytes);
+
+    // Record the consumed key so replays of this exact envelope are rejected
+    this.consumedKeys.add(consumedKey);
+    if (this.consumedKeys.size > this.MAX_CONSUMED_KEYS) {
+      const oldest = this.consumedKeys.values().next().value;
+      if (oldest !== undefined) this.consumedKeys.delete(oldest);
+    }
 
     const decryptedMsg: DecryptedMessage = {
       id: `dm_${envelope.timestamp}_${Math.random().toString(36).substr(2, 6)}`,
@@ -429,6 +477,73 @@ export class DirectMessageSession {
 
   // --- Cryptographic & KDF Helpers ---
 
+  /**
+   * Wire-context additional data bound into every envelope's AES-GCM authentication:
+   * protocol version, Pairwise Channel ID, sender identity, recipient identity.
+   * Both peers derive the identical string from canonical SPKI base64 forms.
+   */
+  private async envelopeAad(
+    channelId: string,
+    senderIdentityPublic: string,
+    recipientIdentityPublic?: string,
+  ): Promise<Uint8Array<ArrayBuffer>> {
+    if (!channelId || !senderIdentityPublic || !recipientIdentityPublic) {
+      throw new Error('Missing wire context for envelope authentication');
+    }
+    const context = `anonchat-dm-v2|${channelId.trim()}|${senderIdentityPublic.trim()}|${recipientIdentityPublic.trim()}`;
+    const encoded = new TextEncoder().encode(context);
+    const out = new Uint8Array(new ArrayBuffer(encoded.byteLength));
+    out.set(encoded);
+    return out;
+  }
+
+  /**
+   * Verifies the Contact's Pre-Key signature (ECDSA-P256/SHA-256 over the Pre-Key's
+   * SPKI bytes) under the Contact's signing public key. Throws when the bundle lacks
+   * a signature or the signature does not verify.
+   */
+  private async verifyPreKeySignature(contact: Contact, remotePreKey: CryptoKey): Promise<void> {
+    const { identitySigningPublicKey, preKeySignature } = contact.identity;
+    if (!identitySigningPublicKey || !preKeySignature) {
+      throw new Error('Contact Identity Bundle lacks a Pre-Key signature; refusing to initiate an unauthenticated session');
+    }
+
+    const signingKey = await crypto.subtle.importKey(
+      'spki',
+      this.base64ToBuffer(identitySigningPublicKey.trim()),
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['verify'],
+    );
+
+    const preKeySpkiBytes = await crypto.subtle.exportKey('spki', remotePreKey);
+    const valid = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      signingKey,
+      this.base64ToBuffer(preKeySignature.trim()),
+      preKeySpkiBytes,
+    );
+
+    if (!valid) {
+      throw new Error('Pre-Key signature verification failed; the Identity Bundle may be forged or corrupted');
+    }
+  }
+
+  /**
+   * HKDF-SHA-256 (extract-then-expand) over the raw key material.
+   */
+  private async hkdf(ikm: ArrayBuffer, salt: ArrayBuffer | Uint8Array<ArrayBuffer>, info: ArrayBuffer, bits: number): Promise<ArrayBuffer> {
+    const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+    return crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, bits);
+  }
+
+  private utf8(s: string): ArrayBuffer {
+    const encoded = new TextEncoder().encode(s);
+    const out = new Uint8Array(new ArrayBuffer(encoded.byteLength));
+    out.set(encoded);
+    return out.buffer as ArrayBuffer;
+  }
+
   private async computeX3DHSecret(
     dhA: ArrayBuffer,
     dhB: ArrayBuffer,
@@ -439,46 +554,33 @@ export class DirectMessageSession {
       ...new Uint8Array(dhB),
       ...new Uint8Array(dhC),
     ]);
-    return crypto.subtle.digest('SHA-256', combinedDH);
+    return this.hkdf(combinedDH.buffer as ArrayBuffer, new Uint8Array(new ArrayBuffer(32)), this.utf8('anonchat-x3dh-v1'), 256);
   }
 
   private async kdfRK(currentRootKey: ArrayBuffer, dhOut: ArrayBuffer): Promise<{ rootKey: ArrayBuffer; chainKey: ArrayBuffer }> {
-    const hmacKey = await crypto.subtle.importKey(
-      'raw',
+    const derived64 = await this.hkdf(
+      dhOut,
       currentRootKey,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
+      this.utf8('anonchat-rk-v1'),
+      512,
     );
-    const derived = await crypto.subtle.sign('HMAC', hmacKey, dhOut);
-
-    const derivedHmac = await crypto.subtle.importKey(
-      'raw',
-      derived,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-
-    const rootKey = await crypto.subtle.sign('HMAC', derivedHmac, new Uint8Array([0x01]));
-    const chainKey = await crypto.subtle.sign('HMAC', derivedHmac, new Uint8Array([0x02]));
-
-    return { rootKey, chainKey };
+    return {
+      rootKey: derived64.slice(0, 32),
+      chainKey: derived64.slice(32),
+    };
   }
 
   private async kdfChain(chainKey: ArrayBuffer): Promise<{ nextChainKey: ArrayBuffer; messageKey: ArrayBuffer }> {
-    const hmacKey = await crypto.subtle.importKey(
-      'raw',
+    const derived64 = await this.hkdf(
       chainKey,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
+      new Uint8Array(new ArrayBuffer(32)),
+      this.utf8('anonchat-ck-v1'),
+      512,
     );
-
-    const messageKey = await crypto.subtle.sign('HMAC', hmacKey, new Uint8Array([0x01]));
-    const nextChainKey = await crypto.subtle.sign('HMAC', hmacKey, new Uint8Array([0x02]));
-
-    return { nextChainKey, messageKey };
+    return {
+      messageKey: derived64.slice(0, 32),
+      nextChainKey: derived64.slice(32),
+    };
   }
 
   // --- Encoding & Key Format Helpers ---

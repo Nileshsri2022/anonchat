@@ -23,7 +23,22 @@ app.prepare().then(() => {
     const io = new SocketIOServer(server, {
         path: '/socket.io',
         cors: {
-            origin: '*',
+            // Same-origin only: reflect the request origin when it matches the serving host.
+            // Cross-origin socket clients are rejected (ticket 07).
+            origin: (origin, cb) => {
+                if (!origin) return cb(null, true);
+                try {
+                    const { host } = new URL(origin);
+                    const allowed = process.env.ALLOWED_ORIGINS
+                        ? process.env.ALLOWED_ORIGINS.split(',')
+                        : null;
+                    if (allowed?.includes(origin)) return cb(null, true);
+                    if (host === (process.env.HOSTNAME || '')) return cb(null, true);
+                    return cb(null, false);
+                } catch {
+                    return cb(null, false);
+                }
+            },
             methods: ['GET', 'POST'],
         },
     });

@@ -40,6 +40,7 @@ interface Room {
   encrypted: boolean;
   isProtected?: boolean;
   passphrase?: string;
+  roomKeyB64?: string;
 }
 
 export default function Home() {
@@ -55,35 +56,44 @@ export default function Home() {
   const [rooms, setRooms] = useState<Room[]>([]);
 
   useEffect(() => {
+    // Identity Vault: load the persisted identity (or create one on first launch).
+    import('@/lib/vault-instance').then(({ getOrCreateVault }) => getOrCreateVault())
+      .then((vault) => console.log('🔐 Identity Vault ready (sealed:', vault.isSealed(), ')'))
+      .catch((e) => console.error('Identity Vault failed to load:', e));
+
     const hasSeenOnboarding = localStorage.getItem('anonchat_onboarding_complete');
     if (hasSeenOnboarding) {
       setShowOnboarding(false);
     }
 
-    // Check for pending contacts from QR scans
-    const pendingContact = localStorage.getItem('pending_contact');
-    if (pendingContact) {
+    // Check for pending Invites from QR scans (stored as the serialized invite string)
+    const pendingInvite = localStorage.getItem('pending_contact');
+    if (pendingInvite) {
       try {
-        const contactData = JSON.parse(pendingContact);
-        import('@/lib/contact-manager').then(({ contactManager }) => {
-          const existingContact = contactManager.getContact(contactData.id);
-          if (!existingContact) {
-            const contact = contactManager.addContact(
-              `Contact ${contactData.id.slice(-4)}`,
-              {
-                id: contactData.id,
-                identityPublicKey: contactData.identityPublic,
-                preKeyPublic: contactData.preKeyPublic,
-                preKeyId: contactData.preKeyId,
-                fingerprint: contactData.fingerprint || 'pending'
-              }
-            );
-            contactManager.establishEncryption(contact.id);
+        import('@/lib/contact-manager').then(async ({ contactManager }) => {
+          const { parseInvite, validateBundle } = await import('@/lib/identity-bundle');
+          const { identityService } = await import('@/lib/identity-service');
+          const bundle = parseInvite(pendingInvite);
+          await validateBundle(bundle);
+          const fingerprint = await identityService.generateFingerprint(bundle.identityPublicKeySpkiB64);
+          const existing = contactManager
+            .getAllContacts()
+            .find((c: { identity: { identityPublicKey: string } }) => c.identity.identityPublicKey === bundle.identityPublicKeySpkiB64);
+          if (!existing) {
+            contactManager.addContact(`Contact ${bundle.preKeyId.toString().padStart(2, '0')}`, {
+              id: `bundle_${bundle.identityPublicKeySpkiB64.slice(0, 12)}`,
+              identityPublicKey: bundle.identityPublicKeySpkiB64,
+              preKeyPublic: bundle.preKeyPublicSpkiB64,
+              preKeyId: bundle.preKeyId,
+              fingerprint,
+              identitySigningPublicKey: bundle.identitySigningPublicKeySpkiB64,
+              preKeySignature: bundle.preKeySignatureB64,
+            });
           }
           localStorage.removeItem('pending_contact');
         });
       } catch (error) {
-        console.error('❌ Failed to process pending contact:', error);
+        console.error('❌ Failed to process pending Invite:', error);
         localStorage.removeItem('pending_contact');
       }
     }
@@ -95,7 +105,7 @@ export default function Home() {
     setShowRoomJoin(true);
   }, []);
 
-  const handleJoinRoom = useCallback((roomId: string, roomName: string, isNewRoom: boolean, isProtected?: boolean, passphrase?: string) => {
+  const handleJoinRoom = useCallback((roomId: string, roomName: string, isNewRoom: boolean, isProtected?: boolean, passphrase?: string, roomKeyB64?: string) => {
     setRooms(prev => {
       const existingRoom = prev.find(r => r.id === roomId);
       if (!existingRoom) {
@@ -107,10 +117,11 @@ export default function Home() {
           encrypted: true,
           isProtected: Boolean(isProtected),
           passphrase,
+          roomKeyB64,
         };
         return [...prev, newRoom];
-      } else if (passphrase && !existingRoom.passphrase) {
-        return prev.map(r => r.id === roomId ? { ...r, passphrase, isProtected: true } : r);
+      } else if ((passphrase || roomKeyB64) && (!existingRoom.passphrase && !existingRoom.roomKeyB64)) {
+        return prev.map(r => r.id === roomId ? { ...r, passphrase, roomKeyB64, isProtected: Boolean(isProtected) } : r);
       }
       return prev;
     });
@@ -242,6 +253,7 @@ export default function Home() {
             roomName={selectedRoomData.name}
             isProtected={selectedRoomData.isProtected}
             passphrase={selectedRoomData.passphrase}
+            roomKeyB64={selectedRoomData.roomKeyB64}
             onOpenInfo={() => setShowInfoPanel(!showInfoPanel)}
             onLeaveRoom={handleLeaveRoom}
           />

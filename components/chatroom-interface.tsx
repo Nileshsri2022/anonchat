@@ -15,17 +15,18 @@ interface ChatroomInterfaceProps {
   roomName: string;
   isProtected?: boolean;
   passphrase?: string;
+  roomKeyB64?: string;
   onOpenInfo: () => void;
   onLeaveRoom: () => void;
 }
 
-export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, onOpenInfo, onLeaveRoom }: ChatroomInterfaceProps) {
+export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, roomKeyB64, onOpenInfo, onLeaveRoom }: ChatroomInterfaceProps) {
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, users, currentUser, isConnected, sendMessage, messageTTL, setMessageTTL } = useChatroom(roomId, roomName, passphrase);
+  const { messages, users, currentUser, isConnected, sendMessage, messageTTL, setMessageTTL } = useChatroom(roomId, roomName, passphrase, roomKeyB64);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
