@@ -19,6 +19,10 @@ export interface ContactIdentity {
   preKeyPublic: string;
   preKeyId: number;
   fingerprint: string;
+  /** Signing public key (SPKI base64 or JWK JSON) used to verify the Pre-Key signature. */
+  identitySigningPublicKey?: string;
+  /** ECDSA-P256-SHA-256 signature over the Pre-Key's SPKI bytes (base64). */
+  preKeySignature?: string;
 }
 
 export interface Contact {

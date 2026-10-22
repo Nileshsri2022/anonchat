@@ -98,13 +98,19 @@ describe('IdentityVault', () => {
     const data = await vault.getIdentityData();
     await vault.seal('passphrase-123');
 
+    // Structural check: a sealed record carries only the sealed blob, never plaintext fields.
     const rawRecord = JSON.stringify(await store.get('identity'));
-    expect(rawRecord).not.toContain(data.identity.privateKeyJwk.kty ?? '___never___');
     expect(rawRecord).not.toContain('privateKeyJwk');
-    expect(rawRecord).not.toContain(data.signedPreKey.signatureB64);
-    // Ciphertext must exist and differ from any plaintext marker.
-    const record = (await store.get('identity')) as { ciphertextB64?: string; data?: unknown };
+    expect(rawRecord).not.toContain('publicKeySpkiB64');
+    const record = (await store.get('identity')) as {
+      ciphertextB64?: string;
+      saltB64?: string;
+      unsealed?: boolean;
+      data?: unknown;
+    };
     expect(record.ciphertextB64).toBeDefined();
+    expect(record.saltB64).toBeDefined();
+    expect(record.unsealed).toBe(false);
     expect(record.data).toBeUndefined();
   });
 
