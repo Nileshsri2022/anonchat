@@ -48,21 +48,37 @@ export class ContactManager {
       alias,
       identity,
       verified: false,
-      verificationCode: this.generateVerificationCode(),
+      verificationCode: '',
       addedAt: new Date(),
       encryptionStatus: 'pending',
     };
 
     console.log('📝 Created contact with ID:', contact.id);
-    console.log('🔢 Generated verification code for contact:', contact.verificationCode);
 
     this.contacts.set(contact.id, contact);
-    this.verificationPending.set(contact.id, contact.verificationCode);
-
-    console.log('📊 Total contacts after add:', this.contacts.size);
-    console.log('📋 All contact IDs:', Array.from(this.contacts.keys()));
-
     return contact;
+  }
+
+  /**
+   * Records the key-derived SAS (Short Authentication String) for a Contact.
+   * Both peers derive the identical SAS from their identity keys — no randomness.
+   */
+  setVerificationSas(contactId: string, sas: string): void {
+    const contact = this.contacts.get(contactId);
+    if (contact) {
+      contact.verificationCode = sas;
+      this.verificationPending.set(contactId, sas);
+    }
+  }
+
+  /** Marks a Contact verified once the SAS has been compared out-of-band. */
+  markVerified(contactId: string): void {
+    const contact = this.contacts.get(contactId);
+    if (contact) {
+      contact.verified = true;
+      contact.encryptionStatus = 'verified';
+      this.verificationPending.delete(contactId);
+    }
   }
 
   verifyContact(contactId: string, code: string): boolean {
@@ -106,12 +122,6 @@ export class ContactManager {
     this.verificationPending.delete(contactId);
   }
 
-  private generateVerificationCode(): string {
-    // Generate 6-digit numeric code (1,000,000 possible combinations)
-    const randomBytes = crypto.getRandomValues(new Uint8Array(4));
-    const randomNumber = new DataView(randomBytes.buffer).getUint32(0);
-    return (randomNumber % 1000000).toString().padStart(6, '0');
-  }
 }
 
 export const contactManager = new ContactManager();

@@ -10,6 +10,7 @@ import {
   parseInvite,
   validateBundle,
   exportIdentityBundle,
+  deriveSas,
   type IdentityBundle,
 } from '@/lib/identity-bundle';
 import { getOrCreateVault } from '@/lib/vault-instance';
@@ -113,7 +114,7 @@ export function QRContactModal({
     }
   };
 
-  const confirmPending = () => {
+  const confirmPending = async () => {
     if (!pendingContact) return;
     const b = pendingContact.bundle;
     const contact = contactManager.addContact(`Contact ${b.preKeyId.toString().padStart(2, '0')}`, {
@@ -125,6 +126,19 @@ export function QRContactModal({
       identitySigningPublicKey: b.identitySigningPublicKeySpkiB64,
       preKeySignature: b.preKeySignatureB64,
     });
+    // Record the key-derived SAS: both peers compute the same value from their
+    // identity keys, so the verification challenge never involves randomness.
+    try {
+      const vault = await getOrCreateVault();
+      const identity = await vault.getIdentityKeyPair();
+      const ownPub = btoa(
+        String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('spki', identity.publicKey))),
+      );
+      contactManager.setVerificationSas(contact.id, await deriveSas(ownPub, b.identityPublicKeySpkiB64));
+    } catch {
+      // SAS recording is best-effort; verification simply stays pending
+    }
+
     onAddContact?.(contact);
     localStorage.removeItem('pending_contact');
     setPendingContact(null);

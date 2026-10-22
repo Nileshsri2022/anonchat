@@ -45,20 +45,6 @@ export class IdentityService {
     return this.fingerprints.get(identityId);
   }
 
-  /**
-   * Generate SAS codes for out-of-band verification
-   */
-  generateSASCodes(identityId1: string, identityId2: string): string[] {
-    const combined = identityId1 + identityId2;
-    const hash = Array.from(crypto.getRandomValues(new Uint8Array(6)))
-      .map(b => (b % 10).toString())
-      .join('');
-
-    const code1 = hash.slice(0, 3);
-    const code2 = hash.slice(3, 6);
-
-    return [code1, code2];
-  }
 }
 
 export const identityService = new IdentityService();

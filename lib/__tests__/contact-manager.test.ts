@@ -3,43 +3,31 @@ import { ContactManager } from '../contact-manager';
 import { identityService } from '../identity-service';
 
 describe('ContactManager & IdentityService', () => {
-  test('adds contact and generates 6-digit verification code', () => {
-    const manager = new ContactManager();
-    const contact = manager.addContact('Alice', {
-      id: 'user_alice_456',
-      identityPublicKey: 'id_pub_base64',
-      preKeyPublic: 'pre_pub_base64',
-      preKeyId: 1,
-      fingerprint: 'A1B2-C3D4-E5F6',
-    });
+  const manager = new ContactManager();
+  const sampleIdentity = {
+    id: 'user_bob_789',
+    identityPublicKey: 'BOB-IDENTITY-PK',
+    preKeyPublic: 'BOB-PREKEY-PK',
+    preKeyId: 1,
+    fingerprint: 'AAAA-BBBB-CCCC',
+  };
 
-    expect(contact.alias).toBe('Alice');
+  test('adds a Contact without minting any verification secret', () => {
+    const contact = manager.addContact('Bob', sampleIdentity);
+    expect(contact.verificationCode).toBe('');
     expect(contact.verified).toBe(false);
-    expect(contact.verificationCode).toMatch(/^\d{6}$/);
-
-    const fetched = manager.getContact(contact.id);
-    expect(fetched).toBeDefined();
-    expect(fetched?.id).toBe(contact.id);
   });
 
-  test('verifies contact with correct verification code and rejects incorrect code', () => {
-    const manager = new ContactManager();
-    const contact = manager.addContact('Bob', {
-      id: 'user_bob_789',
-      identityPublicKey: 'bob_id_pub',
-      preKeyPublic: 'bob_pre_pub',
-      preKeyId: 1,
-      fingerprint: 'B2C3-D4E5-F6A1',
-    });
+  test('SAS-driven verification: wrong SAS rejected, recorded SAS accepted', () => {
+    const contact = manager.addContact('Bob', sampleIdentity);
+    manager.setVerificationSas(contact.id, '123456');
 
-    // Wrong code fails
-    const failResult = manager.verifyContact(contact.id, '000000');
-    expect(failResult).toBe(false);
+    const wrong = manager.verifyContact(contact.id, '000000');
+    expect(wrong).toBe(false);
     expect(manager.getContact(contact.id)?.verified).toBe(false);
 
-    // Correct code succeeds
-    const successResult = manager.verifyContact(contact.id, contact.verificationCode);
-    expect(successResult).toBe(true);
+    const right = manager.verifyContact(contact.id, '123456');
+    expect(right).toBe(true);
     expect(manager.getContact(contact.id)?.verified).toBe(true);
   });
 
@@ -55,5 +43,28 @@ describe('ContactManager & IdentityService', () => {
     identityService.storeFingerprint('user_charlie', fp);
     expect(identityService.verifyFingerprint('user_charlie', fp)).toBe(true);
     expect(identityService.verifyFingerprint('user_charlie', 'WRONG-FP')).toBe(false);
+  });
+});
+
+describe('ContactManager — Ticket 09: honest verification', () => {
+  test('no random verification codes are minted; verification is driven by key-derived SAS', async () => {
+    const { contactManager } = await import('../contact-manager');
+    const contact = contactManager.addContact('Eve', {
+      id: 'bundle_test1',
+      identityPublicKey: 'pkA',
+      preKeyPublic: 'pkB',
+      preKeyId: 1,
+      fingerprint: 'FP',
+    });
+    // The stored code is empty: the challenge comes from deriveSas, never randomness
+    expect(contact.verificationCode).toBe('');
+
+    // Wrong SAS does not verify
+    expect(contactManager.verifyContact(contact.id, '000000')).toBe(false);
+    expect(contactManager.getContact(contact.id)?.verified).toBe(false);
+
+    // markVerified is the honest path once the SAS has been compared out-of-band
+    contactManager.markVerified(contact.id);
+    expect(contactManager.getContact(contact.id)?.verified).toBe(true);
   });
 });
