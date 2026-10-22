@@ -126,35 +126,51 @@ class RelayAPI {
     return data.messages || [];
   }
 
-  startMessagePolling(roomId: string, callback: (message: RelayMessage) => void): void {
-    if (this.activeRooms.has(roomId)) {
-      return;
-    }
+  startPolling(
+    roomId: string,
+    onNewMessages: (messages: RelayMessage[]) => void,
+    lastMessageId?: string
+  ): void {
+    this.stopPolling(roomId);
 
-    let lastMessageId: string | undefined;
+    let currentLastId = lastMessageId;
 
-    const interval = setInterval(async () => {
+    const poll = async () => {
       try {
-        const messages = await this.pollMessages(roomId, lastMessageId);
+        const messages = await this.pollMessages(roomId, currentLastId);
 
         if (messages.length > 0) {
-          lastMessageId = messages[messages.length - 1].id;
-          messages.forEach(callback);
+          onNewMessages(messages);
+          currentLastId = messages[messages.length - 1].id;
         }
       } catch (error) {
         console.error('Error polling messages:', error);
       }
-    }, this.pollingInterval);
+    };
 
-    this.activeRooms.set(roomId, interval);
+    poll();
+    const intervalId = setInterval(poll, this.pollingInterval);
+    this.activeRooms.set(roomId, intervalId);
+  }
+
+  stopPolling(roomId: string): void {
+    const intervalId = this.activeRooms.get(roomId);
+    if (intervalId) {
+      clearInterval(intervalId);
+      this.activeRooms.delete(roomId);
+    }
+  }
+
+  startMessagePolling(roomId: string, callback: (message: RelayMessage) => void): void {
+    this.startPolling(roomId, (msgs) => msgs.forEach(callback));
   }
 
   stopMessagePolling(roomId: string): void {
-    const interval = this.activeRooms.get(roomId);
-    if (interval) {
-      clearInterval(interval);
-      this.activeRooms.delete(roomId);
-    }
+    this.stopPolling(roomId);
+  }
+
+  cleanup(): void {
+    this.activeRooms.forEach((_, roomId) => this.stopPolling(roomId));
   }
 
   async leaveRoom(roomId: string, userId: string): Promise<void> {

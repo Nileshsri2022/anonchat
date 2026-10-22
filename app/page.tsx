@@ -38,6 +38,8 @@ interface Room {
   userCount: number;
   lastActivity: Date;
   encrypted: boolean;
+  isProtected?: boolean;
+  passphrase?: string;
 }
 
 export default function Home() {
@@ -93,7 +95,7 @@ export default function Home() {
     setShowRoomJoin(true);
   }, []);
 
-  const handleJoinRoom = useCallback((roomId: string, roomName: string, isNewRoom: boolean) => {
+  const handleJoinRoom = useCallback((roomId: string, roomName: string, isNewRoom: boolean, isProtected?: boolean, passphrase?: string) => {
     setRooms(prev => {
       const existingRoom = prev.find(r => r.id === roomId);
       if (!existingRoom) {
@@ -103,8 +105,12 @@ export default function Home() {
           userCount: isNewRoom ? 1 : 3,
           lastActivity: new Date(),
           encrypted: true,
+          isProtected: Boolean(isProtected),
+          passphrase,
         };
         return [...prev, newRoom];
+      } else if (passphrase && !existingRoom.passphrase) {
+        return prev.map(r => r.id === roomId ? { ...r, passphrase, isProtected: true } : r);
       }
       return prev;
     });
@@ -234,6 +240,8 @@ export default function Home() {
           <ChatroomInterface
             roomId={selectedRoom}
             roomName={selectedRoomData.name}
+            isProtected={selectedRoomData.isProtected}
+            passphrase={selectedRoomData.passphrase}
             onOpenInfo={() => setShowInfoPanel(!showInfoPanel)}
             onLeaveRoom={handleLeaveRoom}
           />

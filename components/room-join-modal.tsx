@@ -6,53 +6,119 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, Users, Lock } from 'lucide-react';
+import { Shield, Users, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { roomEncryption } from '@/lib/room-encryption';
+import { relayAPI } from '@/lib/relay-api';
 
 interface RoomJoinModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onJoinRoom: (roomId: string, roomName: string, isNewRoom: boolean) => void;
+  onJoinRoom: (roomId: string, roomName: string, isNewRoom: boolean, isProtected?: boolean, passphrase?: string) => void;
 }
 
 export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProps) {
   const [roomId, setRoomId] = useState('');
   const [roomName, setRoomName] = useState('');
-  const [newRoomName, setNewRoomName] = useState('');
+  const [joinPassphrase, setJoinPassphrase] = useState('');
+  const [showJoinPassphrase, setShowJoinPassphrase] = useState(false);
 
-  const generateRoomId = () => {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    let id = '';
-    for (let i = 0; i < 12; i++) {
-      id += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return id;
-  };
+  const [newRoomName, setNewRoomName] = useState('');
+  const [createPassphrase, setCreatePassphrase] = useState('');
+  const [showCreatePassphrase, setShowCreatePassphrase] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleCreateRoom = async () => {
-    try {
-      const response = await fetch('/api/relay/rooms', {
-        method: 'POST',
-      });
-      const data = await response.json();
+    setError(null);
+    setIsLoading(true);
 
-      if (data.success) {
-        onJoinRoom(data.roomId, newRoomName || 'My Room', true);
-        setNewRoomName('');
-        onClose();
-      } else {
-        alert('Error creating room: ' + data.error);
+    try {
+      const generatedId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const hasPassphrase = Boolean(createPassphrase.trim());
+
+      let canary;
+      if (hasPassphrase) {
+        await roomEncryption.deriveKeyFromPassphrase(generatedId, createPassphrase.trim());
+        canary = await roomEncryption.createCanary();
       }
-    } catch (error) {
-      alert('Error creating room: ' + (error instanceof Error ? error.message : 'Unknown error'));
+
+      const res = await relayAPI.createRoom({
+        id: generatedId,
+        name: newRoomName.trim() || 'My Room',
+        isProtected: hasPassphrase,
+        canary,
+      });
+
+      if (res.roomId) {
+        onJoinRoom(
+          res.roomId,
+          newRoomName.trim() || 'My Room',
+          true,
+          hasPassphrase,
+          hasPassphrase ? createPassphrase.trim() : undefined
+        );
+        setNewRoomName('');
+        setCreatePassphrase('');
+        onClose();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create room');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleJoinRoom = () => {
-    if (roomId.trim()) {
-      onJoinRoom(roomId.trim(), roomName || `Room ${roomId.slice(0, 6)}`, false);
+  const handleJoinRoom = async () => {
+    if (!roomId.trim()) return;
+
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const cleanRoomId = roomId.trim();
+      const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('anonchat_userid') || 'user_anon' : 'user_anon';
+      const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('anonchat_username') || 'User' : 'User';
+
+      const joinResult = await relayAPI.joinRoom(cleanRoomId, currentUserId, currentUsername);
+
+      if (joinResult.isProtected) {
+        if (!joinPassphrase.trim()) {
+          setError('This room is password-protected. Please enter the room passphrase.');
+          setIsLoading(false);
+          return;
+        }
+
+        // Validate via Room Canary zero-knowledge trial decryption
+        if (joinResult.canary) {
+          const trialEncryption = new (roomEncryption.constructor as any)();
+          await trialEncryption.deriveKeyFromPassphrase(cleanRoomId, joinPassphrase.trim());
+          const isValid = await trialEncryption.verifyCanary(joinResult.canary);
+
+          if (!isValid) {
+            setError('Incorrect room passphrase. Please check the secret and try again.');
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
+      onJoinRoom(
+        cleanRoomId,
+        joinResult.name || roomName.trim() || `Room ${cleanRoomId.slice(0, 6)}`,
+        false,
+        Boolean(joinResult.isProtected),
+        joinPassphrase.trim() || undefined
+      );
+
       setRoomId('');
       setRoomName('');
+      setJoinPassphrase('');
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to join room');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -61,13 +127,20 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5" />
+            <Users className="w-5 h-5 text-primary" />
             Join or Create Chatroom
           </DialogTitle>
           <DialogDescription>
             Connect with multiple users in encrypted anonymous chatrooms via Tor
           </DialogDescription>
         </DialogHeader>
+
+        {error && (
+          <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs p-3 rounded-md flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <Tabs defaultValue="join" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -80,45 +153,57 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
               <Label htmlFor="roomId">Room ID</Label>
               <Input
                 id="roomId"
-                placeholder="Enter room ID (e.g., abc123def456)"
+                placeholder="Enter room ID (e.g., room_17926...)"
                 value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
-                className="font-mono"
+                onChange={(e) => {
+                  setRoomId(e.target.value);
+                  setError(null);
+                }}
+                className="font-mono text-sm"
               />
-              <p className="text-xs text-muted-foreground">
-                Get the room ID from the person who created the room
-              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="roomName">Room Name (optional)</Label>
-              <Input
-                id="roomName"
-                placeholder="Give this room a name"
-                value={roomName}
-                onChange={(e) => setRoomName(e.target.value)}
-              />
+              <Label htmlFor="joinPassphrase" className="flex items-center justify-between">
+                <span>Room Passphrase</span>
+                <span className="text-xs text-muted-foreground font-normal">Required for protected rooms</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="joinPassphrase"
+                  type={showJoinPassphrase ? 'text' : 'password'}
+                  placeholder="Leave blank if room has no passphrase"
+                  value={joinPassphrase}
+                  onChange={(e) => {
+                    setJoinPassphrase(e.target.value);
+                    setError(null);
+                  }}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowJoinPassphrase(!showJoinPassphrase)}
+                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  {showJoinPassphrase ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
-            <div className="bg-muted/50 p-4 rounded-lg space-y-2">
+            <div className="bg-muted/50 p-3.5 rounded-lg space-y-2 border border-border/40">
               <div className="flex items-start gap-2 text-xs">
                 <Shield className="w-4 h-4 text-primary mt-0.5" />
                 <div>
-                  <p className="font-semibold mb-1">End-to-End Encrypted</p>
-                  <p className="text-muted-foreground">All messages are encrypted with AES-256-GCM. The relay cannot read your messages.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2 text-xs">
-                <Lock className="w-4 h-4 text-primary mt-0.5" />
-                <div>
-                  <p className="font-semibold mb-1">Tor Protected</p>
-                  <p className="text-muted-foreground">Your IP address and location are hidden via the Tor network.</p>
+                  <p className="font-semibold mb-0.5">Zero-Knowledge Security</p>
+                  <p className="text-muted-foreground">
+                    Passphrases are stretched with 100k PBKDF2 iterations and verified client-side. The relay never sees your passphrase.
+                  </p>
                 </div>
               </div>
             </div>
 
-            <Button onClick={handleJoinRoom} className="w-full" disabled={!roomId.trim()}>
-              Join Room
+            <Button onClick={handleJoinRoom} className="w-full" disabled={!roomId.trim() || isLoading}>
+              {isLoading ? 'Verifying & Joining...' : 'Join Room'}
             </Button>
           </TabsContent>
 
@@ -127,25 +212,50 @@ export function RoomJoinModal({ isOpen, onClose, onJoinRoom }: RoomJoinModalProp
               <Label htmlFor="newRoomName">Room Name</Label>
               <Input
                 id="newRoomName"
-                placeholder="e.g., Privacy Advocates, Study Group"
+                placeholder="e.g., Privacy Advocates, Project Team"
                 value={newRoomName}
                 onChange={(e) => setNewRoomName(e.target.value)}
               />
             </div>
 
-            <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
-              <p className="text-sm font-semibold mb-2">How it works:</p>
-              <ol className="text-xs space-y-1 text-muted-foreground list-decimal list-inside">
-                <li>A unique room ID will be generated</li>
-                <li>Share the room ID with people you want to join</li>
-                <li>Everyone with the room ID can join and chat</li>
-                <li>Messages are encrypted and routed via Tor</li>
-                <li>No registration or personal info required</li>
-              </ol>
+            <div className="space-y-2">
+              <Label htmlFor="createPassphrase" className="flex items-center justify-between">
+                <span>Room Passphrase (Optional)</span>
+                <span className="text-xs text-muted-foreground font-normal">Leaves room public if empty</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="createPassphrase"
+                  type={showCreatePassphrase ? 'text' : 'password'}
+                  placeholder="Set secret passphrase to restrict access"
+                  value={createPassphrase}
+                  onChange={(e) => setCreatePassphrase(e.target.value)}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePassphrase(!showCreatePassphrase)}
+                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  {showCreatePassphrase ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
-            <Button onClick={handleCreateRoom} className="w-full">
-              Create New Room
+            <div className="bg-primary/10 p-3.5 rounded-lg border border-primary/20 space-y-1.5 text-xs text-muted-foreground">
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-primary" />
+                Password Protection Rules:
+              </p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>If set, only peers who know the passphrase can decrypt messages</li>
+                <li>An encrypted canary token is created to verify joining users</li>
+                <li>Relay servers only route opaque ciphertext</li>
+              </ul>
+            </div>
+
+            <Button onClick={handleCreateRoom} className="w-full" disabled={isLoading}>
+              {isLoading ? 'Creating Room...' : 'Create New Room'}
             </Button>
           </TabsContent>
         </Tabs>
