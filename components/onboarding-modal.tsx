@@ -3,106 +3,87 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Lock, Shield, Eye, Zap } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Shield, Lock, AlertTriangle } from 'lucide-react';
+import { getOrCreateVault, getStorageKeyManager, resetHistoryStorage } from '@/lib/instances';
 
 interface OnboardingModalProps {
   onComplete: () => void;
 }
 
+// Mockup 01: a single welcome card. The optional passphrase seals the
+// Identity Vault immediately, using the same flow as Settings (ADR-0004).
 export function OnboardingModal({ onComplete }: OnboardingModalProps) {
-  const [step, setStep] = useState(0);
+  const [passphrase, setPassphrase] = useState('');
+  const [sealing, setSealing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const steps = [
-    {
-      title: 'Welcome to AnonChat',
-      description: 'Your private, encrypted messaging platform',
-      icon: Lock,
-      details: [
-        'End-to-end encryption using Signal Protocol',
-        'Zero message storage',
-        'Anonymous Tor routing',
-      ],
-    },
-    {
-      title: 'How It Works',
-      description: 'Advanced privacy at every step',
-      icon: Shield,
-      details: [
-        'X3DH handshake for key exchange',
-        'Double Ratchet for forward secrecy',
-        'Sealed-sender technology',
-      ],
-    },
-    {
-      title: 'Your Privacy Matters',
-      description: 'No metadata. No logs. No tracking.',
-      icon: Eye,
-      details: [
-        'Stateless relay design',
-        'Perfect forward secrecy',
-        'Protection from future decryption',
-      ],
-    },
-  ];
-
-  const CurrentIcon = steps[step].icon;
+  const handleCreate = async () => {
+    setSealing(true);
+    setError(null);
+    try {
+      if (passphrase.trim()) {
+        const vault = await getOrCreateVault();
+        await vault.seal(passphrase);
+        await getStorageKeyManager().then((m) => m.seal(passphrase));
+        resetHistoryStorage();
+      }
+      onComplete();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to seal the vault');
+      setSealing(false);
+    }
+  };
 
   return (
-    <div className="min-h-dvh bg-gradient-to-br from-background via-background to-card flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl bg-card/50 backdrop-blur border-border">
-        <div className="p-6 sm:p-12 text-center">
-          <div className="flex justify-center mb-8">
-            <div className="bg-primary/10 p-6 rounded-xl">
-              <CurrentIcon className="w-12 h-12 text-primary" />
+    <div className="min-h-dvh bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-card border-border shadow-sm">
+        <div className="p-6 sm:p-10 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
+              <Shield className="w-8 h-8 text-primary-foreground" />
             </div>
           </div>
 
-          <h1 className="text-4xl font-bold text-foreground mb-3">
-            {steps[step].title}
+          <h1 className="text-2xl font-semibold text-foreground mb-2">
+            Welcome to AnonChat
           </h1>
-          <p className="text-muted-foreground text-lg mb-8">
-            {steps[step].description}
+          <p className="text-muted-foreground mb-8">
+            Anonymous, end-to-end encrypted chat, routed through Tor
           </p>
 
-          <div className="space-y-3 mb-12 text-left max-w-md mx-auto">
-            {steps[step].details.map((detail, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <Zap className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-foreground">{detail}</span>
-              </div>
-            ))}
-          </div>
+          <div className="text-left max-w-sm mx-auto space-y-4">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-primary" />
+              <span className="text-sm font-semibold text-foreground">
+                Your Identity Vault
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground -mt-2">
+              Keys are generated and stay on this device.
+            </p>
 
-          <div className="flex gap-3 justify-center mb-6">
-            {steps.map((_, i) => (
-              <div
-                key={i}
-                className={`h-2 rounded-full transition-all ${
-                  i === step ? 'bg-primary w-8' : 'bg-border w-2'
-                }`}
+            <div className="space-y-1.5">
+              <Input
+                type="password"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                placeholder="Set a Profile Passphrase (optional)"
+                autoComplete="new-password"
               />
-            ))}
-          </div>
+              <p className="flex items-center gap-1.5 text-xs text-warning">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                Without it, your vault stays unlocked on this device
+              </p>
+            </div>
 
-          <div className="flex gap-4">
-            {step > 0 && (
-              <Button
-                variant="outline"
-                onClick={() => setStep(step - 1)}
-                className="flex-1"
-              >
-                Back
-              </Button>
+            {error && (
+              <p className="text-xs text-destructive text-center">{error}</p>
             )}
-            {step < steps.length - 1 ? (
-              <Button onClick={() => setStep(step + 1)} className="flex-1">
-                Next
-              </Button>
-            ) : (
-              <Button onClick={onComplete} className="flex-1">
-                Start Chatting
-              </Button>
-            )}
+
+            <Button onClick={handleCreate} disabled={sealing} className="w-full">
+              {sealing ? 'Creating…' : 'Create my identity'}
+            </Button>
           </div>
         </div>
       </Card>

@@ -40,11 +40,11 @@ export function ContactVerificationModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md bg-card">
-        <div className="p-6">
+    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center sm:p-4 z-50">
+      <Card className="w-full sm:max-w-md bg-card max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-x-0 max-sm:border-b-0">
+        <div className="p-5 sm:p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-foreground">Verify Contact</h2>
+            <h2 className="text-lg font-semibold text-foreground">Verify contact</h2>
             <button
               onClick={onCancel}
               className="text-muted-foreground hover:text-foreground"
@@ -64,7 +64,7 @@ export function ContactVerificationModal({
                 <label className="text-sm font-medium text-foreground">
                   Identity Fingerprint
                 </label>
-                <div className="p-3 bg-input rounded-lg font-mono text-xs text-foreground break-all">
+                <div className="p-3 bg-muted rounded-lg font-mono text-xs text-foreground break-all">
                   {fingerprint}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -84,7 +84,7 @@ export function ContactVerificationModal({
                   className="w-full bg-input border border-border rounded-lg px-3 py-2 text-foreground placeholder-muted-foreground text-center font-mono tracking-widest"
                 />
                 <p className="text-xs text-muted-foreground text-center">
-                  Display code: <span className="font-mono font-semibold text-accent">{verificationCode}</span>
+                  Display code: <span className="font-mono font-semibold text-primary">{verificationCode}</span>
                 </p>
               </div>
 

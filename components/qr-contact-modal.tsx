@@ -159,12 +159,12 @@ export function QRContactModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-2xl bg-card">
-        <div className="p-6">
+    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center sm:p-4 z-50">
+      <Card className="w-full sm:max-w-2xl bg-card max-h-[90vh] overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-x-0 max-sm:border-b-0">
+        <div className="p-5 sm:p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-foreground">Add Contact</h2>
+            <h2 className="text-lg font-semibold text-foreground">Add contact</h2>
             <button
               onClick={onClose}
               className="text-muted-foreground hover:text-foreground"

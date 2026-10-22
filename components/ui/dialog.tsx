@@ -129,6 +129,9 @@ function DialogDescription({
   )
 }
 
+// Mockups 10/12: dialogs anchor to the bottom as sheets on phones, centered from sm up.
+export const dialogSheetMobile =
+  'max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:w-full max-sm:max-w-full max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-x-0 max-sm:border-b-0 max-sm:p-4'
 export {
   Dialog,
   DialogClose,

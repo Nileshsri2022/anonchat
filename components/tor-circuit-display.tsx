@@ -2,14 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
-import { RefreshCw, Shield, Circle, Lock } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, dialogSheetMobile } from '@/components/ui/dialog';
+import { RefreshCw, Shield, Circle } from 'lucide-react';
 
 interface CircuitHop {
     nickname: string;
@@ -162,27 +156,40 @@ export function TorCircuitDisplay() {
         }
     };
 
-    // Compact button display
+    // Slim circuit strip (mockup 03): dot + DE -> NL -> IS · #id
+    const hopsLabel = circuit
+        ? [circuit.hops.guard, circuit.hops.middle, circuit.hops.exit]
+              .map((h) => (h?.country && h.country !== 'Unknown' ? h.country : null))
+              .filter(Boolean)
+              .join(' \u2192 ')
+        : '';
+    const circuitTag =
+        circuit?.circuitId && circuit.circuitId !== 'server-tor'
+            ? ` \u00b7 #${circuit.circuitId.slice(0, 4)}`
+            : '';
+
     const CompactButton = () => (
         <button
             onClick={() => setIsOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-sm"
+            title="Tor circuit details"
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
         >
-            <Shield className="w-4 h-4 text-primary" />
-            <span className="font-medium">Tor Circuit</span>
-            <Lock className="w-3 h-3 text-success" />
-            <span className="font-mono text-xs text-muted-foreground">{exitIP}</span>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${error ? 'bg-warning' : 'bg-success'}`} />
+            <span className="truncate">
+                Tor circuit: {hopsLabel || exitIP} {circuitTag}
+            </span>
+            <RefreshCw className="w-3 h-3 ml-auto shrink-0" />
         </button>
     );
 
     // Full circuit modal
     const CircuitModal = () => (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className={`sm:max-w-md ${dialogSheetMobile}`}>
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Shield className="w-5 h-5 text-primary" />
-                        Tor Circuit
+                        <Shield className="w-4 h-4 text-success" />
+                        Tor circuit
                     </DialogTitle>
                 </DialogHeader>
 
@@ -213,7 +220,7 @@ export function TorCircuitDisplay() {
 
                             {/* Guard Node */}
                             {circuit.hops.guard && (
-                                <div className="flex items-start gap-2 py-1">
+                                <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
@@ -227,7 +234,7 @@ export function TorCircuitDisplay() {
                                                     ? circuit.hops.guard.ip
                                                     : ''}
                                             </span>
-                                            <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                                            <span className="text-xs font-semibold text-primary">
                                                 Guard
                                             </span>
                                         </div>
@@ -240,7 +247,7 @@ export function TorCircuitDisplay() {
 
                             {/* Middle Node */}
                             {circuit.hops.middle && (
-                                <div className="flex items-start gap-2 py-1">
+                                <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
@@ -264,7 +271,7 @@ export function TorCircuitDisplay() {
 
                             {/* Exit Node */}
                             {circuit.hops.exit && (
-                                <div className="flex items-start gap-2 py-1">
+                                <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
                                     <Circle className="w-3 h-3 mt-1 text-muted-foreground fill-muted-foreground" />
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
@@ -300,12 +307,12 @@ export function TorCircuitDisplay() {
                             className="w-full"
                         >
                             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                            New Circuit for this Site
+                            New circuit
                         </Button>
 
                         {/* Info Text */}
                         <p className="text-xs text-muted-foreground text-center">
-                            Your <span className="font-semibold text-purple-600 dark:text-purple-400">Guard</span> node may not change.
+                            Your <span className="font-semibold text-primary">Guard</span> node may not change.
                         </p>
                     </div>
                 )}

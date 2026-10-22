@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { RoomList } from '@/components/room-list';
+import { RoomList, type Room } from '@/components/room-list';
 import { ContactList } from '@/components/contact-list';
 import { ChatroomInterface } from '@/components/chatroom-interface';
 import { DirectMessageInterface } from '@/components/direct-message-interface';
@@ -27,22 +27,6 @@ const SettingsPanel = dynamic(
   { ssr: false }
 );
 
-const CreateGroupModal = dynamic(
-  () => import('@/components/create-group-modal').then(m => ({ default: m.CreateGroupModal })),
-  { ssr: false }
-);
-
-interface Room {
-  id: string;
-  name: string;
-  userCount: number;
-  lastActivity: Date;
-  encrypted: boolean;
-  isProtected?: boolean;
-  passphrase?: string;
-  roomKeyB64?: string;
-}
-
 export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
@@ -50,7 +34,6 @@ export default function Home() {
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoomJoin, setShowRoomJoin] = useState(false);
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [currentView, setCurrentView] = useState<'rooms' | 'contacts'>('rooms');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -134,19 +117,6 @@ export default function Home() {
     setShowInfoPanel(false);
   }, []);
 
-  const handleCreateGroup = useCallback((groupName: string, selectedRoomIds: string[], selectedContactIds: string[]) => {
-    const groupRoom: Room = {
-      id: `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: groupName,
-      userCount: selectedRoomIds.length + selectedContactIds.length + 1,
-      lastActivity: new Date(),
-      encrypted: true,
-    };
-    setRooms(prev => [...prev, groupRoom]);
-    setSelectedContact(null);
-    setSelectedRoom(groupRoom.id);
-  }, []);
-
   const handleSelectRoom = useCallback((id: string) => {
     setSelectedContact(null);
     setSelectedRoom(id);
@@ -211,7 +181,6 @@ export default function Home() {
               selectedId={selectedRoom}
               onSelect={handleSelectRoom}
               onCreateRoom={() => setShowRoomJoin(true)}
-              onCreateGroup={() => setShowCreateGroup(true)}
               onOpenSettings={() => setShowSettings(true)}
             />
           ) : (
@@ -298,12 +267,6 @@ export default function Home() {
         onClose={() => setShowSettings(false)}
       />
 
-      <CreateGroupModal
-        isOpen={showCreateGroup}
-        onClose={() => setShowCreateGroup(false)}
-        rooms={rooms}
-        onCreateGroup={handleCreateGroup}
-      />
     </div>
   );
 }

@@ -213,10 +213,10 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
           return (
             <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
               <div
-                className={`max-w-[70%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${
+                className={`max-w-[70%] sm:max-w-md rounded-2xl px-4 py-2.5 text-sm ${
                   isMe
                     ? 'bg-primary text-primary-foreground rounded-br-none'
-                    : 'bg-muted/70 text-foreground rounded-bl-none border border-border/40'
+                    : 'bg-card text-foreground rounded-bl-none border border-border'
                 }`}
               >
                 {attachment ? (
@@ -303,7 +303,7 @@ export function DirectMessageInterface({ contact, onClose, onContactVerified }: 
             className="flex-1 bg-background"
           />
 
-          <Button onClick={handleSend} disabled={!inputText.trim()} size="icon">
+          <Button onClick={handleSend} disabled={!inputText.trim()} size="icon" className="size-10 rounded-full shrink-0 self-end mb-0.5">
             <Send className="w-4 h-4" />
           </Button>
         </div>
