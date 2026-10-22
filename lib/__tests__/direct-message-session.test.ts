@@ -3,6 +3,11 @@ import { DirectMessageSession, derivePairwiseChannelId } from '../direct-message
 import { generateIdentityKeys, generateEphemeralKeys } from '../crypto';
 import type { Contact } from '../contact-manager';
 
+/** Signing keypair for a session's sealed-sender ephemeral signature (Envelope v3). */
+async function makeSigningKeys(): Promise<CryptoKeyPair> {
+  return crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+}
+
 /** Builds Bob's side: identity keys, pre-keys, and a signed Contact bundle (as an Invite would carry). */
 async function makeBobBundle() {
   const bobIdentityKeys = await generateIdentityKeys();
@@ -54,6 +59,7 @@ describe('DirectMessageSession - Slice 1: Handshake & First Message', () => {
     const aliceSession = new DirectMessageSession({
       selfUserId: aliceIdentity.id,
       selfIdentityKeys: aliceIdentity.keys,
+      selfSigningKeys: await makeSigningKeys(),
     });
     await aliceSession.initiate(bobContact);
 
@@ -77,7 +83,7 @@ describe('DirectMessageSession - Slice 1: Handshake & First Message', () => {
     // Bob receives and decrypts Alice's envelope
     const decrypted = await bobSession.receiveEnvelope(envelope);
     expect(decrypted.content).toBe('Hello Bob, secure over Tor!');
-    expect(decrypted.senderId).toBe('user_alice');
+    expect(decrypted.senderIdentityPublic).toBeDefined(); // authenticated sender, from inside the ciphertext
   });
 });
 
@@ -89,6 +95,7 @@ describe('DirectMessageSession - Slice 2: Bidirectional Ratcheting & Turn Taking
     const aliceSession = new DirectMessageSession({
       selfUserId: 'user_alice',
       selfIdentityKeys: aliceIdentityKeys,
+      selfSigningKeys: await makeSigningKeys(),
     });
     await aliceSession.initiate(bobContact);
 
@@ -132,6 +139,7 @@ describe('DirectMessageSession - Slice 3: Out-of-Order Delivery & Skipped-Key Ca
     const aliceSession = new DirectMessageSession({
       selfUserId: 'user_alice',
       selfIdentityKeys: aliceIdentityKeys,
+      selfSigningKeys: await makeSigningKeys(),
     });
     await aliceSession.initiate(bobContact);
 
@@ -195,6 +203,7 @@ describe('DirectMessageSession - Slice 4: Pairwise Channel ID & Disappearing Mes
     const aliceSession = new DirectMessageSession({
       selfUserId: 'user_alice',
       selfIdentityKeys: aliceIdentityKeys,
+      selfSigningKeys: await makeSigningKeys(),
     });
     await aliceSession.initiate(bobContact);
 
@@ -261,7 +270,7 @@ describe('DirectMessageSession - Ticket 03: Protocol Hardening', () => {
     }) as any;
 
     // Valid signature → accepted (session established)
-    const ok = new DirectMessageSession({ selfUserId: 'alice', selfIdentityKeys: aliceKeys });
+    const ok = new DirectMessageSession({ selfUserId: 'alice', selfIdentityKeys: aliceKeys, selfSigningKeys: await makeSigningKeys() });
     await ok.initiate(await mkContact(goodSig));
     expect(ok.getChannelId()).toBeDefined();
 
@@ -281,7 +290,7 @@ describe('DirectMessageSession - Ticket 03: Replay & Tamper', () => {
     const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
     const aliceKeys = await generateIdentityKeys();
 
-    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys });
+    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys, selfSigningKeys: await makeSigningKeys() });
     await aliceSession.initiate(bobContact);
 
     const bobSession = new DirectMessageSession({
@@ -304,7 +313,7 @@ describe('DirectMessageSession - Ticket 03: Header Authentication', () => {
     const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
     const aliceKeys = await generateIdentityKeys();
 
-    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys });
+    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys, selfSigningKeys: await makeSigningKeys() });
     await aliceSession.initiate(bobContact);
     const envelope = await aliceSession.sendMessage('context switching attack?');
 
@@ -323,7 +332,7 @@ describe('DirectMessageSession - Ticket 03: Header Authentication', () => {
     const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
     const aliceKeys = await generateIdentityKeys();
 
-    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys });
+    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys, selfSigningKeys: await makeSigningKeys() });
     await aliceSession.initiate(bobContact);
     const envelope = await aliceSession.sendMessage('do not modify me');
 
@@ -346,7 +355,7 @@ describe('DirectMessageSession - Ticket 03: Skipped-Key Cache bound', () => {
     const { bobIdentityKeys, bobPreKeys, bobContact } = await makeBobBundle();
     const aliceKeys = await generateIdentityKeys();
 
-    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys });
+    const aliceSession = new DirectMessageSession({ selfUserId: 'user_alice', selfIdentityKeys: aliceKeys, selfSigningKeys: await makeSigningKeys() });
     await aliceSession.initiate(bobContact);
 
     const bobSession = new DirectMessageSession({

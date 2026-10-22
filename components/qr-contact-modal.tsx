@@ -72,7 +72,7 @@ export function QRContactModal({
         setParseError('Your data is sealed — unlock it in Settings → Local data to share your Invite');
         return;
       }
-      const bundle = await exportIdentityBundle(vault);
+      const bundle = await exportIdentityBundle(vault, localStorage.getItem('anonchat_display_name') ?? undefined);
       const invite = serializeInvite(bundle);
       const fingerprint = await identityService.generateFingerprint(bundle.identityPublicKeySpkiB64);
       identityService.storeFingerprint('current_user', fingerprint);

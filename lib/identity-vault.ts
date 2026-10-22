@@ -5,6 +5,8 @@
 // Sealed format: PBKDF2-SHA-256 (random 16-byte salt) -> AES-256-GCM over the JSON
 // vault data, with "anonchat-vault-v1" bound as additional authenticated data.
 
+import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
+
 import type { KVStore } from './kv-store';
 
 const VAULT_RECORD_KEY = 'identity';
@@ -21,6 +23,8 @@ export interface IdentityVaultData {
     privateKeyJwk: JsonWebKey;
     signatureB64: string;
   };
+  /** ML-KEM-768 keypair for the hybrid post-quantum handshake (ADR-0006). Optional for pre-PQ records. */
+  pqKem?: { publicKeyB64: string; secretKeyB64: string };
   createdAt: number;
 }
 
@@ -100,6 +104,7 @@ export class IdentityVault {
     const identityPair = await generateEcdhKeyPair();
     const signingPair = await generateSigningKeyPair();
     const preKeyPair = await generateEcdhKeyPair();
+    const pqPair = ml_kem768.keygen();
 
     const preKeyPublicSpkiB64 = await exportPublicSpkiB64(preKeyPair.publicKey);
     const signatureB64 = bufferToBase64(
@@ -125,6 +130,10 @@ export class IdentityVault {
         publicKeySpkiB64: preKeyPublicSpkiB64,
         privateKeyJwk: await crypto.subtle.exportKey('jwk', preKeyPair.privateKey),
         signatureB64,
+      },
+      pqKem: {
+        publicKeyB64: bufferToBase64(pqPair.publicKey.slice().buffer as ArrayBuffer),
+        secretKeyB64: bufferToBase64(pqPair.secretKey.slice().buffer as ArrayBuffer),
       },
       createdAt: Date.now(),
     };
@@ -287,6 +296,27 @@ export class IdentityVault {
   }
 
   /** The signing key pair (ECDSA) as usable CryptoKeys. */
+  /** Whether this vault carries an ML-KEM key for the hybrid PQ handshake. */
+  hasPqKem(): boolean {
+    return this.unlockedData?.pqKem !== undefined;
+  }
+
+  /** The vault's ML-KEM-768 public key (base64). Throws if absent or sealed. */
+  getPqKemPublicB64(): string {
+    if (!this.unlockedData?.pqKem) throw new SealedVaultError();
+    return this.unlockedData.pqKem.publicKeyB64;
+  }
+
+  /** ML-KEM-768 decapsulation for the responder side of the hybrid handshake (ADR-0006). */
+  async decapsulatePq(cipherText: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+    if (!this.unlockedData?.pqKem) throw new SealedVaultError();
+    const secretKey = base64ToBytes(this.unlockedData.pqKem.secretKeyB64);
+    const shared = ml_kem768.decapsulate(cipherText, secretKey);
+    const out = new Uint8Array(new ArrayBuffer(shared.length));
+    out.set(shared);
+    return out;
+  }
+
   async getSigningKeyPair(): Promise<{ publicKey: CryptoKey; privateKey: CryptoKey }> {
     const data = await this.getIdentityData();
     const publicKey = await crypto.subtle.importKey(

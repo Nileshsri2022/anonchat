@@ -10,6 +10,8 @@ import {
   type DecryptedMessage,
 } from './direct-message-session';
 import type { IdentityVault } from './identity-vault';
+import { exportIdentityBundle } from './identity-bundle';
+import { isControlPayload, parseControlPayload, serializeControlPayload, type ControlPayload } from './control-payloads';
 import type { Contact } from './contact-manager';
 
 export type Transport = (roomId: string, envelope: MessageEnvelope) => Promise<void> | void;
@@ -42,6 +44,10 @@ export class DirectMessageClient {
   private readonly sessions = new Map<string, DirectMessageSession>();
   private readonly remoteIdentityByChannel = new Map<string, string>();
   private readonly messagesLog: DecryptedMessage[] = [];
+  /** Read receipts are OFF by default; opt-in per contact identity (ticket 21). */
+  private readonly readReceiptsEnabled = new Set<string>();
+  /** Highest inbound message number seen per channel (for receipts). */
+  private readonly lastInboundNumber = new Map<string, number>();
 
   constructor(options: DirectMessageClientOptions) {
     this.selfUserId = options.selfUserId;
@@ -51,11 +57,30 @@ export class DirectMessageClient {
   private async newSession(): Promise<DirectMessageSession> {
     const identityKeys = await this.vault.getIdentityKeyPair();
     const preKey = await this.vault.getPreKeyPair();
+    const signing = await this.vault.getSigningKeyPair();
     return new DirectMessageSession({
       selfUserId: this.selfUserId,
       selfIdentityKeys: identityKeys,
       selfPreKeys: { id: preKey.id, publicKey: preKey.publicKey, privateKey: preKey.privateKey },
+      selfSigningKeys: signing,
+      pqDecapsulate: this.vault.hasPqKem()
+        ? (cipherText) => this.vault.decapsulatePq(cipherText)
+        : undefined,
     });
+  }
+
+  /** Sealed sender (ADR-0007): own envelopes come back via catch-up polling; recognise
+   *  them by ciphertext hash (the wire carries no sender identity to check). */
+  private readonly recentSentHashes = new Set<string>();
+  private readonly MAX_SENT_HASHES = 500;
+
+  private rememberSent(envelope: MessageEnvelope): void {
+    const fingerprint = `${envelope.channelId}|${envelope.iv}|${envelope.ciphertext}`;
+    this.recentSentHashes.add(fingerprint);
+    if (this.recentSentHashes.size > this.MAX_SENT_HASHES) {
+      const oldest = this.recentSentHashes.values().next().value;
+      if (oldest !== undefined) this.recentSentHashes.delete(oldest);
+    }
   }
 
   /** Initiator: create (or reuse) the session for a Contact from its Identity Bundle. */
@@ -74,19 +99,35 @@ export class DirectMessageClient {
     return session;
   }
 
-  /** Initiator: send the first message to a Contact, fanning out to channel + inbox. */
+  /** Initiator: send the first message to a Contact, fanning out to channel + inbox.
+   *  If the FIRST send of a fresh session fails to deliver, the session is discarded:
+   *  the PQ/handshake material rode that envelope, so a retry must re-initiate
+   *  (otherwise the responder could never complete the handshake — #24 outbox flow). */
   async sendToContact(
     contact: Contact,
     content: string,
     ttl?: number,
     transport?: Transport,
   ): Promise<MessageEnvelope> {
+    const existingChannel = [...this.remoteIdentityByChannel.entries()].find(
+      ([, remote]) => remote.trim() === contact.identity.identityPublicKey.trim(),
+    )?.[0];
+    const fresh = !existingChannel;
     const session = await this.sessionForContact(contact);
     const envelope = await session.sendMessage(content, { ttl });
+    this.rememberSent(envelope);
     if (transport) {
       const recipientInbox = await deriveInboxRoomId(contact.identity.identityPublicKey);
-      await transport(envelope.channelId, envelope);
-      await transport(recipientInbox, envelope);
+      try {
+        await transport(envelope.channelId, envelope);
+        await transport(recipientInbox, envelope);
+      } catch (e) {
+        if (fresh && !session.hasReceivedMessage()) {
+          this.sessions.delete(envelope.channelId);
+          this.remoteIdentityByChannel.delete(envelope.channelId);
+        }
+        throw e;
+      }
     }
     return envelope;
   }
@@ -101,6 +142,7 @@ export class DirectMessageClient {
     const session = this.sessions.get(channelId);
     if (!session) throw new Error(`No session on channel ${channelId}`);
     const envelope = await session.sendMessage(content, { ttl });
+    this.rememberSent(envelope);
     if (transport) {
       const remote = this.remoteIdentityByChannel.get(channelId);
       if (remote) await transport(await deriveInboxRoomId(remote), envelope);
@@ -118,8 +160,9 @@ export class DirectMessageClient {
    */
   async handleInboundEnvelope(envelope: MessageEnvelope): Promise<DecryptedMessage | null> {
     // Catch-up polling (and multi-room fan-out) can hand us our own envelopes;
-    // they are never inbound messages.
-    if (envelope.senderIdentityPublic?.trim() === (await this.ownIdentityPublic())) {
+    // they are never inbound messages. Sealed envelopes carry no sender identity,
+    // so we recognise our own traffic by the exact (channel, iv, ciphertext) we sent.
+    if (this.recentSentHashes.has(`${envelope.channelId}|${envelope.iv}|${envelope.ciphertext}`)) {
       return null;
     }
 
@@ -134,12 +177,99 @@ export class DirectMessageClient {
       if (e instanceof Error && /replayed message rejected/i.test(e.message)) {
         return null; // already processed — duplicate delivery
       }
-      throw e;
+      // Double-initiate collision (#18): both peers opened sessions on the same
+      // Pairwise Channel before either received. Our initiator session has never
+      // decrypted anything, so the peer's initiation wins: retry once with a
+      // fresh responder session and keep whichever actually decrypts.
+      if (session.hasReceivedMessage()) throw e;
+      try {
+        const retry = await this.newSession();
+        decrypted = await retry.receiveEnvelope(envelope);
+        session = retry;
+      } catch {
+        throw e; // original failure — not a collision (tamper, corruption, …)
+      }
     }
     this.sessions.set(decrypted.channelId, session);
-    this.remoteIdentityByChannel.set(decrypted.channelId, envelope.senderIdentityPublic);
+    const remoteIdentity = decrypted.senderIdentityPublic ?? envelope.senderIdentityPublic;
+    if (remoteIdentity) {
+      this.remoteIdentityByChannel.set(decrypted.channelId, remoteIdentity);
+    }
+
+    // Control payloads never enter the visible history (ticket 21)
+    if (isControlPayload(decrypted.content)) {
+      const control = parseControlPayload(decrypted.content);
+      const shaped = control.t === 'typing' ? ({ type: 'typing' } as const) : ({ type: 'read', upTo: control.upTo } as const);
+      return { ...decrypted, content: '', control: shaped };
+    }
+
+    this.lastInboundNumber.set(decrypted.channelId, (this.lastInboundNumber.get(decrypted.channelId) ?? -1) + 1);
     this.messagesLog.push(decrypted);
     return decrypted;
+  }
+
+  /** Send a typing indicator on a channel (on by default; throttling is the caller's job). */
+  async sendTyping(
+    channelId: string,
+    transport?: Transport,
+  ): Promise<MessageEnvelope> {
+    return this.sendControl(channelId, { t: 'typing' }, transport);
+  }
+
+  /** Read receipts: opt-in per contact identity; OFF by default (ticket 21). */
+  setReadReceiptsEnabled(contactIdentityPublic: string, enabled: boolean): void {
+    if (enabled) this.readReceiptsEnabled.add(contactIdentityPublic.trim());
+    else this.readReceiptsEnabled.delete(contactIdentityPublic.trim());
+  }
+
+  receiptsEnabledFor(contactIdentityPublic: string): boolean {
+    return this.readReceiptsEnabled.has(contactIdentityPublic.trim());
+  }
+
+  /** Emit a read receipt on a channel IF the remote contact opted in; no-op otherwise. */
+  async sendReadReceipt(channelId: string, transport?: Transport): Promise<boolean> {
+    const remote = this.remoteIdentityByChannel.get(channelId);
+    if (!remote || !this.readReceiptsEnabled.has(remote.trim())) {
+      return false; // receipts off — never emit
+    }
+    const upTo = this.lastInboundNumber.get(channelId) ?? 0;
+    await this.sendControl(channelId, { t: 'read', upTo: Math.max(0, upTo) }, transport);
+    return true;
+  }
+
+  private async sendControl(
+    channelId: string,
+    control: ControlPayload,
+    transport?: Transport,
+  ): Promise<MessageEnvelope> {
+    const session = this.sessions.get(channelId);
+    if (!session) throw new Error(`No session on channel ${channelId}`);
+    const envelope = await session.sendMessage(serializeControlPayload(control));
+    this.rememberSent(envelope);
+    if (transport) {
+      const remote = this.remoteIdentityByChannel.get(channelId);
+      if (remote) await transport(await deriveInboxRoomId(remote), envelope);
+      await transport(channelId, envelope);
+    }
+    return envelope;
+  }
+
+  /** Our own Identity Bundle (v2 when the vault carries PQ keys) for Room Intros. */
+  async exportOwnBundle(): Promise<ReturnType<typeof exportIdentityBundle>> {
+    return exportIdentityBundle(this.vault);
+  }
+
+  /** Open (or reuse) the DM session toward a Contact reached via a Room Intro. */
+  async channelForIntro(contact: Contact): Promise<string> {
+    const session = await this.sessionForContact(contact);
+    const channelId = session.getChannelId();
+    if (!channelId) throw new Error('Intro channel setup failed');
+    return channelId;
+  }
+
+  /** The remote identity a channel belongs to (for outbox resolution). */
+  identityForChannel(channelId: string): string | undefined {
+    return this.remoteIdentityByChannel.get(channelId);
   }
 
   /** Pairwise Channels this client has sessions on. */

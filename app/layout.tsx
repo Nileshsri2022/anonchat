@@ -1,28 +1,29 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { ThemeProvider } from '@/components/theme-provider'
+import { ServiceWorkerRegistrar } from '@/components/service-worker-registrar'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'AnonChat - Private Encrypted Messaging',
   description: 'Zero-storage, end-to-end encrypted messaging using Signal Protocol and Tor',
-  generator: 'v0.app',
+  applicationName: 'AnonChat',
+  manifest: '/manifest.json',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: [{ url: '/icon-512.png', type: 'image/png' }],
+    apple: '/icon-512.png',
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'AnonChat',
+  },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0f172a',
 }
 
 export default function RootLayout({
@@ -33,6 +34,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
+        <ServiceWorkerRegistrar />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

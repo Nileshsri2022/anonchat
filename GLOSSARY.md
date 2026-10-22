@@ -71,3 +71,47 @@ _Avoid_: Verification code, security code, identity hash
 **Skipped-Key Cache**:
 A bounded in-memory table of derived message keys stored temporarily to decrypt delayed or out-of-order messages in a Double Ratchet session.
 _Avoid_: Key cache, backlog buffer, replay cache
+
+**PQ Handshake (Hybrid)**:
+The DM session setup that combines classical ECDH with an ML-KEM-768 encapsulation so the root key resists future quantum attackers; both secrets feed one HKDF derivation.
+_Avoid_: Quantum encryption, PQ replacement, Kyber swap
+
+**PQ KEM Key**:
+The ML-KEM-768 public key a client publishes in its Identity Bundle (signed like the Pre-Key) so Initiators can perform the PQ share of the hybrid handshake.
+_Avoid_: Kyber key, quantum key, post-quantum certificate
+
+**Sealed Sender**:
+The envelope property that no sender identity appears on the wire; the recipient derives who sent a message inside the authenticated ratchet, and the Relay sees only an opaque destination.
+_Avoid_: Anonymous sender, hidden header, senderless message
+
+**Envelope v3**:
+The wire format with sender identity stripped from the transport frame: channel id, ratchet header, ciphertext — nothing else.
+_Avoid_: v2 envelope, extended header, rich envelope
+
+**Sender Key**:
+A per-member, per-Room symmetric key from which a member derives their own forward-secure message chain; distributed pairwise over DM ratchets, never via the Room Key.
+_Avoid_: Group key, room sender secret, member key
+
+**Sender Chain**:
+The per-sender ratchet inside a Room: chain keys advance per message with a bounded skipped-key cache, so members authenticate who sent what and compromise of one member exposes only their own future until rotation.
+_Avoid_: Group ratchet, broadcast chain, room session
+
+**Intro Message**:
+The single Room-Key-encrypted announcement (Identity Bundle + Display Name) a joining member posts so others can open pairwise DM channels to them; the only content the Room Key ever protects.
+_Avoid_: Join message, hello packet, membership broadcast
+
+**Unverified Badge**:
+The UI marker on a member whose Identity Bundle has not yet been SAS-verified through the pairwise verification flow.
+_Avoid_: Trust indicator, safety dot, verified tick inverse
+
+**Blob**:
+An opaque, encrypted file stored temporarily on the Relay under a size cap and TTL; its AES key travels inside the encrypted message, so the Relay stores ciphertext it can neither read nor attribute.
+_Avoid_: Attachment file, media store, upload
+
+**Outbox**:
+The client-side encrypted queue of messages composed while offline, sealed under the Profile Passphrase scheme and flushed automatically on reconnect.
+_Avoid_: Draft folder, send queue, pending tray
+
+**Display Name**:
+An optional, self-chosen label a client publishes in its Identity Bundle and Intro Messages; never required, never looked up, anonymity stays the default.
+_Avoid_: Username, profile name, handle
