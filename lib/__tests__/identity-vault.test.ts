@@ -124,7 +124,7 @@ describe('IdentityVault', () => {
 
 describe('IdentityVault — key material access', () => {
   test('provides usable ECDH identity and pre-key pairs (imported from persisted JWKs)', async () => {
-    const { generateEphemeralKeys } = await import('../crypto');
+    const { generateEphemeralKeys } = await import('./crypto-keygen');
     const store = new MemoryKVStore();
     const vault = await IdentityVault.create({ store, iterations: 1000 });
 

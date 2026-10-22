@@ -21,3 +21,9 @@ Final: 89 tests / 423 expects green · tsc clean · offline build green. All 12 
 
 ## WAVE COMPLETE (2026-10-22)
 All 12 tickets (#15–#26) shipped via PR #27. Spec issue #14 closed out by the wave-completion commit on master (the Arena token cannot close/comment on issues).
+
+> NOTE (cleanup wave 2026-10): `lib/transport/transport-adapter.ts`, `lib/tor-bridge.ts`,
+> and `lib/__tests__/transport-seam.test.ts` (ticket 25 artifacts) were deleted in cleanup
+> ticket #35 — the import-graph detector proved nothing in live code ever imported them;
+> they existed only for their own tests. The transport seam lives in lib/socket-service.ts
+> and lib/relay-core.ts, both covered by relay/golden tests.

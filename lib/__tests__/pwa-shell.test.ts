@@ -1,7 +1,6 @@
 // Ticket #23 — PWA shell: manifest sanity + service worker network-only API.
 import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'fs';
-import { unreadTitle, UnreadBadge } from '../unread-badge';
 
 const manifest = JSON.parse(readFileSync(new URL('../../public/manifest.json', import.meta.url), 'utf8'));
 const sw = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
@@ -31,22 +30,4 @@ describe('PWA shell (ticket 23)', () => {
     expect(sw).toContain("caches.match('/')");
   });
 
-  test('unread tab-title badge: pure title math + badge lifecycle', () => {
-    expect(unreadTitle('AnonChat', 0)).toBe('AnonChat');
-    expect(unreadTitle('AnonChat', 3)).toBe('(3) AnonChat');
-
-    const titles: string[] = [];
-    const badge = new UnreadBadge('AnonChat', (t) => titles.push(t));
-    badge.onHidden();
-    badge.onIncoming();
-    badge.onIncoming();
-    expect(badge.count()).toBe(2);
-    expect(titles.at(-1)).toBe('(2) AnonChat');
-    badge.onVisible();
-    expect(badge.count()).toBe(0);
-    expect(titles.at(-1)).toBe('AnonChat');
-    // Visible surface: incoming messages never badge
-    badge.onIncoming();
-    expect(badge.count()).toBe(0);
-  });
 });
