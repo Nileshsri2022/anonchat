@@ -506,6 +506,7 @@ export class DirectMessageSession {
           parsed.sk,
           parsed.sig,
           new TextEncoder().encode(`anonchat-ephemeral-v3|${envelope.header.dhPublic}`),
+          'Sender ephemeral',
         );
         senderIdentityPublic = parsed.ik;
         if (!this.recipientIdentityPublicCanonical) {
@@ -715,6 +716,7 @@ export class DirectMessageSession {
     signingPublicSpkiB64: string,
     signatureB64: string,
     signedBytes: Uint8Array<ArrayBuffer>,
+    what = 'PQ key',
   ): Promise<void> {
     const signingPub = await crypto.subtle.importKey(
       'spki',
@@ -730,7 +732,7 @@ export class DirectMessageSession {
       signedBytes,
     );
     if (!ok) {
-      throw new Error('PQ key signature verification failed for this Contact');
+      throw new Error(`${what} signature verification failed for this Contact`);
     }
   }
 
