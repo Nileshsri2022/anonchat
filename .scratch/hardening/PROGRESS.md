@@ -13,8 +13,8 @@ so per-ticket status lives here until it can be mirrored into the final PR.
 | 05 Room Keys + Invites | #7 | ✅ implemented | Standards 0 hard · Spec 5/5 ACs | see git |
 | 06 Encrypted history | #8 | ✅ implemented | Standards 0 hard · Spec 4/4 ACs | 174233f |
 | 07 Relay hardening | #9 | ✅ implemented | Standards 0 hard · Spec 8/8 ACs | see git |
-| 08 Privacy/build | #10 | in progress | | |
-| 09 Verification UX + consolidation | #11 | unblocked | | |
+| 08 Privacy/build | #10 | ✅ implemented | offline build green, headers added | see git |
+| 09 Verification UX + consolidation | #11 | in progress | | |
 | 10 Full-flow E2E | #12 | blocked by #3–#11 | | |
 
 Test seams (agreed): S1 lib module interfaces · S2 relay HTTP · S3 two-client E2E.
