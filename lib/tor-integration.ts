@@ -32,6 +32,7 @@ declare global {
 
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import { Socket } from 'net';
+import { controlAuthenticateCommand } from './tor-control-auth';
 export interface TorStatus {
   connected: boolean;
   circuitEstablished: boolean;
@@ -89,11 +90,10 @@ export class TorIntegration {
   }
 
   private async connectTorControl(): Promise<boolean> {
-    // Skip during build/SSG - Tor isn't available on build servers
-    if (typeof window === 'undefined' && process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV) {
-      return false;
-    }
-
+    // No NODE_ENV short-circuit here: production is exactly where the relay runs
+    // alongside Tor, and `NODE_ENV=production` is also set at build time. A build
+    // server has no Tor, so the connect below fails immediately with ECONNREFUSED
+    // and resolves false — which is the same answer, reached honestly.
     return new Promise((resolve) => {
       if (this.controlSocket && !this.controlSocket.destroyed) {
         resolve(true);
@@ -394,9 +394,11 @@ export class TorIntegration {
         const connected = await this.connectTorControl();
         if (!connected) return null;
 
-        // Authenticate (no password needed with CookieAuthentication 0)
+        // Authenticate with the cookie when Tor wrote one (the container), and
+        // unauthenticated when it did not (desktop builds run with
+        // CookieAuthentication 0).
         try {
-          await this.sendTorCommand('AUTHENTICATE ""');
+          await this.sendTorCommand(await controlAuthenticateCommand());
           this.authenticated = true;
         } catch (error) {
           console.error('Tor authentication failed:', error);
@@ -570,7 +572,7 @@ export class TorIntegration {
         if (!connected) return false;
 
         try {
-          await this.sendTorCommand('AUTHENTICATE ""');
+          await this.sendTorCommand(await controlAuthenticateCommand());
           this.authenticated = true;
         } catch (error) {
           console.error('Tor authentication failed:', error);
@@ -600,10 +602,13 @@ let isRefreshing = false;
 const CACHE_TTL = 30000; // 30 seconds
 
 /**
- * Get current Tor exit IP from circuit info (matches circuit display)
- * Uses caching to avoid control port timeout issues
+ * The exit IP of the current circuit, or null when there is no circuit.
+ *
+ * Never invents one. A made-up address in this slot is worse than an absence: it
+ * makes an unrouted connection look routed, which is the one claim an anonymity
+ * app must not get wrong.
  */
-export async function getTorIP(): Promise<string> {
+export async function getTorIP(): Promise<string | null> {
   const now = Date.now();
 
   // Return cached IP if still valid
@@ -613,24 +618,24 @@ export async function getTorIP(): Promise<string> {
 
   // Prevent concurrent refresh attempts
   if (isRefreshing) {
-    return cachedExitIP || 'tor-cached';
+    return cachedExitIP;
   }
 
   isRefreshing = true;
 
   try {
-    // Get exit IP directly from current circuit
     const circuitInfo = await torIntegration.getCircuitInfo();
-    if (circuitInfo?.hops.exit?.ip) {
-      cachedExitIP = circuitInfo.hops.exit.ip;
+    const exitIp = circuitInfo?.hops.exit?.ip;
+    if (exitIp) {
+      cachedExitIP = exitIp;
       cacheExpiry = now + CACHE_TTL;
       return cachedExitIP;
     }
-    // Fallback: return anonymous placeholder
-    return cachedExitIP || `tor-${Math.random().toString(36).substring(2, 8)}`;
+    cachedExitIP = null;
+    return null;
   } catch {
-    // Silently fallback
-    return cachedExitIP || `tor-${Math.random().toString(36).substring(2, 8)}`;
+    cachedExitIP = null;
+    return null;
   } finally {
     isRefreshing = false;
   }

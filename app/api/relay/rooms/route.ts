@@ -6,7 +6,10 @@ import { relayCore } from '@/lib/instances';
 
 export async function GET() {
   try {
-    const rooms = roomRegistry.listRooms();
+    // Listed from RelayCore, not the metadata registry: RelayCore is where
+    // membership lives, so the registry's counts drift from reality after a
+    // leave, a restart, or a spin-down.
+    const rooms = relayCore.listRooms();
     return NextResponse.json({ success: true, rooms });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to list rooms' }, { status: 500 });

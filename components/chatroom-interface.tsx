@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Shield, Info, Users, Send, Copy, Check, QrCode, Timer, Lock, LogOut } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useChatroom } from '@/hooks/use-chatroom';
+import { useTorStatus } from '@/hooks/use-tor-status';
 import { QRContactModal } from '@/components/qr-contact-modal';
 import { TorCircuitDisplay } from '@/components/tor-circuit-display';
 import { TorStatusIndicator } from '@/components/tor-status-indicator';
@@ -18,19 +19,29 @@ interface ChatroomInterfaceProps {
   roomKeyB64?: string;
   onOpenInfo: () => void;
   onLeaveRoom: () => void;
+  /** Lifts live counts to the Room Info panel so it stops showing placeholders. */
+  onStats?: (stats: { users: Array<{ id: string; username: string; online: boolean }>; messageCount: number }) => void;
 }
 
-export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, roomKeyB64, onOpenInfo, onLeaveRoom }: ChatroomInterfaceProps) {
+export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, roomKeyB64, onOpenInfo, onLeaveRoom, onStats }: ChatroomInterfaceProps) {
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { messages, users, currentUser, isConnected, sendMessage, messageTTL, setMessageTTL } = useChatroom(roomId, roomName, passphrase, roomKeyB64);
+  const tor = useTorStatus();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Count only real traffic: the welcome/error lines are not messages.
+  const messageCount = useMemo(() => messages.filter((m) => m.userId !== 'system').length, [messages]);
+
+  useEffect(() => {
+    onStats?.({ users, messageCount });
+  }, [onStats, users, messageCount]);
 
   const handleSendMessage = useCallback(() => {
     if (message.trim()) {
@@ -208,7 +219,14 @@ export function ChatroomInterface({ roomId, roomName, isProtected, passphrase, r
         </div>
         <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
           <Shield className="w-3 h-3" />
-          Messages encrypted with AES-256-GCM • Routed via Tor
+          Messages encrypted with AES-256-GCM
+          {/* Say what the Tor circuit covers. It is the relay's own circuit, not
+              a claim that this browser's connection is anonymised. */}
+          {tor.loading ? null : tor.routed ? (
+            <> • Relay Tor: circuit active</>
+          ) : (
+            <span className="text-warning"> • Relay Tor: no circuit</span>
+          )}
           {messageTTL > 0 && (
             <>
               {' '}• <Timer className="w-3 h-3" /> Disappearing in {messageTTL / 1000}s

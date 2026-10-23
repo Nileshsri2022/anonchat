@@ -186,6 +186,17 @@ export class RelayCore {
     return this.rooms.get(roomId);
   }
 
+  /**
+   * Rooms this relay currently knows about, newest first, with the live member
+   * count from the membership map. The relay is the authority on membership: the
+   * read-only metadata registry can drift from it after a restart.
+   */
+  listRooms(): Array<{ id: string; name?: string; isProtected: boolean; createdAt: number; userCount: number }> {
+    return [...this.rooms.values()]
+      .map((room) => ({ ...room, userCount: this.members.get(room.id)?.size ?? 0 }))
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
   join(roomId: string, member: { userId: string; username: string; joinedAt?: number }): number {
     let set = this.members.get(roomId);
     if (!set) {
@@ -283,6 +294,11 @@ export class RelayCore {
    * Store an opaque encrypted blob (ADR-0009). The Relay never inspects or
    * attributes the payload; records hold only the data and its timestamps —
    * ids are already unguessable, so no content hash is kept.
+   *
+   * Passing `blobId` fills a reservation made by `reserveBlobId`. A reservation
+   * may be filled exactly once: an id that already holds bytes is refused, so a
+   * second upload cannot silently swap the ciphertext out from under a message
+   * that already references it.
    */
   putBlob(input: { data: Uint8Array; clientKey: string; blobId?: string }): PutBlobResult {
     if (input.data.byteLength > this.maxBlobBytes) {
@@ -290,6 +306,10 @@ export class RelayCore {
     }
     if (!this.allowRequest(input.clientKey, 'blob')) {
       return { accepted: false, reason: 'blob upload rate limit exceeded' };
+    }
+    const existing = input.blobId ? this.blobs.get(input.blobId) : undefined;
+    if (existing && existing.data.byteLength > 0) {
+      return { accepted: false, reason: 'blob id already finalised' };
     }
     const blobId = input.blobId ?? newBlobId();
     const now = Date.now();
@@ -305,7 +325,7 @@ export class RelayCore {
     return { accepted: true, blobId };
   }
 
-  /** Fetch a blob by id; expired or unknown blobs are indistinguishable (null). */
+  /** Fetch a blob by id; expired, unknown and still-empty blobs are indistinguishable (null). */
   async getBlob(blobId: string): Promise<FetchedBlob | null> {
     const blob = this.blobs.get(blobId);
     if (!blob) return null;
@@ -313,6 +333,10 @@ export class RelayCore {
       this.blobs.delete(blobId);
       return null;
     }
+    // An id that was reserved but never uploaded to is not an attachment.
+    // Serving it as a 0-byte success would make every download look fine while
+    // AEAD authentication fails at the receiving end (ADR-0009).
+    if (blob.data.byteLength === 0) return null;
     return { data: blob.data };
   }
 

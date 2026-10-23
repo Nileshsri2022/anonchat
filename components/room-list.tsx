@@ -14,6 +14,7 @@ export interface Room {
   userCount: number;
   lastActivity: Date;
   encrypted: boolean;
+  createdAt?: Date;
   isProtected?: boolean;
   passphrase?: string;
   roomKeyB64?: string;

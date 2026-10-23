@@ -10,6 +10,7 @@ import { RoomInfoPanel } from '@/components/room-info-panel';
 import { Button } from '@/components/ui/button';
 import { PanelLeftClose, PanelLeft, MessageSquare } from 'lucide-react';
 import { contactManager, type Contact } from '@/lib/contact-manager';
+import { useTorStatus } from '@/hooks/use-tor-status';
 
 // Dynamic imports for modals - reduces initial bundle by ~40-50KB
 const OnboardingModal = dynamic(
@@ -37,6 +38,19 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<'rooms' | 'contacts'>('rooms');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rooms, setRooms] = useState<Room[]>([]);
+  // Live Room stats, lifted out of the chat pane so the Room Info panel reports
+  // what is actually in the Room instead of placeholder members.
+  const [roomStats, setRoomStats] = useState<{ users: Array<{ id: string; username: string; online: boolean }>; messageCount: number }>({
+    users: [],
+    messageCount: 0,
+  });
+
+  const tor = useTorStatus();
+  const handleRoomStats = useCallback(
+    (stats: { users: Array<{ id: string; username: string; online: boolean }>; messageCount: number }) =>
+      setRoomStats(stats),
+    [],
+  );
 
   useEffect(() => {
     // Identity Vault: load the persisted identity (or create one on first launch).
@@ -98,6 +112,7 @@ export default function Home() {
           userCount: isNewRoom ? 1 : 3,
           lastActivity: new Date(),
           encrypted: true,
+          createdAt: new Date(),
           isProtected: Boolean(isProtected),
           passphrase,
           roomKeyB64,
@@ -225,6 +240,7 @@ export default function Home() {
             roomKeyB64={selectedRoomData.roomKeyB64}
             onOpenInfo={() => setShowInfoPanel(!showInfoPanel)}
             onLeaveRoom={handleLeaveRoom}
+            onStats={handleRoomStats}
           />
 
           <RoomInfoPanel
@@ -232,14 +248,11 @@ export default function Home() {
             onClose={() => setShowInfoPanel(false)}
             roomName={selectedRoomData.name}
             roomId={selectedRoom}
-            userCount={selectedRoomData.userCount}
-            users={[
-              { id: '1', username: 'Alice', online: true },
-              { id: '2', username: 'Bob', online: true },
-              { id: '3', username: 'Charlie', online: false },
-            ]}
-            createdAt={new Date()}
-            messageCount={42}
+            userCount={roomStats.users.filter(u => u.online).length}
+            users={roomStats.users}
+            createdAt={selectedRoomData.createdAt ?? selectedRoomData.lastActivity}
+            messageCount={roomStats.messageCount}
+            torProtected={tor.routed}
           />
         </>
       ) : (

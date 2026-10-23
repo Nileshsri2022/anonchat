@@ -3,6 +3,25 @@ services:
     name: anonchat
     runtime: docker
     dockerfilePath: ./Dockerfile.render
+    # /api/health answers 200 whenever the process can route; Tor is reported in
+    # the body rather than gating liveness, so a Tor outage cannot take the
+    # relay out of service.
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: "3000"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: TOR_CONTROL_PORT
+        value: "9051"
+      - key: TOR_SOCKS_PORT
+        value: "9050"
+      - key: TOR_CONTROL_COOKIE
+        value: /var/lib/tor/control_auth_cookie
+      # Socket origins. Leave empty to allow only the origin this relay is served
+      # on; set it to a comma-separated list when a front end on another host
+      # needs to talk to it.
+      - key: ALLOWED_ORIGINS
+        value: ""

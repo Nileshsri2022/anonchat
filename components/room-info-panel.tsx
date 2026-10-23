@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Users, Shield, Lock, Copy, Check } from 'lucide-react';
+import { X, Users, Shield, ShieldAlert, Lock, Copy, Check } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useState } from 'react';
 
@@ -15,6 +15,8 @@ interface RoomInfoPanelProps {
   users: Array<{ id: string; username: string; online: boolean }>;
   createdAt: Date;
   messageCount: number;
+  /** False when the relay has no Tor circuit: never claim protection we lack. */
+  torProtected: boolean;
 }
 
 export function RoomInfoPanel({
@@ -26,6 +28,7 @@ export function RoomInfoPanel({
   users,
   createdAt,
   messageCount,
+  torProtected,
 }: RoomInfoPanelProps) {
   const [copied, setCopied] = useState(false);
 
@@ -80,12 +83,30 @@ export function RoomInfoPanel({
                   <Shield className="w-4 h-4 text-primary" />
                   <span>End-to-End Encrypted</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Lock className="w-4 h-4 text-primary" />
-                  <span>Tor Network Protected</span>
+                <div
+                  className={`flex items-center gap-2 text-sm ${torProtected ? '' : 'text-warning'}`}
+                >
+                  {torProtected ? (
+                    <Lock className="w-4 h-4 text-primary" />
+                  ) : (
+                    <ShieldAlert className="w-4 h-4 text-warning" />
+                  )}
+                  <span>
+                    {torProtected ? 'Relay Tor: circuit active' : 'Relay Tor: no circuit'}
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   All messages encrypted with AES-256-GCM. The relay cannot read your messages.
+                  {!torProtected && (
+                    <>
+                      {' '}
+                      Encryption holds either way, but this relay has no Tor circuit right now.
+                    </>
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tor covers the relay&apos;s own outbound traffic. Your connection to this relay
+                  still travels over HTTPS, so it is protected by TLS — not anonymised by Tor.
                 </p>
               </div>
             </div>

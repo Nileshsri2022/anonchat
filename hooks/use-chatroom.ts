@@ -341,17 +341,24 @@ export function useChatroom(roomId: string, roomName: string, passphrase?: strin
 
     // Try WebSocket first
     if (useWebSocket) {
+      // `connect()` resolves asynchronously: without this guard a handler can be
+      // registered after unmount and then never cleaned up.
+      let cancelled = false;
+
       socketService.connect()
         .then(() => {
+          if (cancelled) return;
           socketService.joinRoom(roomId, currentUser.id, currentUser.username);
           socketService.onMessage(roomId, handleNewMessage);
         })
         .catch((err) => {
+          if (cancelled) return;
           console.warn('🔌 WebSocket failed, falling back to polling:', err.message);
           setUseWebSocket(false);
         });
 
       return () => {
+        cancelled = true;
         socketService.leaveRoom(roomId, currentUser.id);
       };
     } else {

@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM base AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
+# Electron is a desktop-only dependency: its postinstall downloads a ~100MB
+# binary that the relay never runs, and a failed download fails the whole build.
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 RUN bun install --frozen-lockfile
 
 # Stage 3: Build the application
@@ -30,6 +33,7 @@ COPY . .
 RUN mkdir -p public
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 RUN bun run build
 RUN bun install --frozen-lockfile --production
 
@@ -48,18 +52,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN groupadd --system --gid 1001 nodejs && \
     useradd --system --uid 1001 --gid nodejs nextjs
 
-# Configure Tor for non-root user
+# Tor's data directory and log must both be writable by the user running it.
 RUN mkdir -p /var/lib/tor /var/run/tor /var/log/tor && \
     chown -R nextjs:nodejs /var/lib/tor /var/run/tor /var/log/tor && \
     chmod 700 /var/lib/tor
 
-# Create Tor config for non-root user
-RUN echo "SocksPort 9050" > /etc/tor/torrc && \
-    echo "ControlPort 9051" >> /etc/tor/torrc && \
-    echo "CookieAuthentication 0" >> /etc/tor/torrc && \
-    echo "DataDirectory /var/lib/tor" >> /etc/tor/torrc && \
-    echo "Log notice file /var/log/tor/notices.log" >> /etc/tor/torrc && \
-    echo "RunAsDaemon 0" >> /etc/tor/torrc && \
+# ControlPort and SocksPort are pinned to loopback: nothing outside this
+# container may request a circuit through them or read circuit state.
+# CookieAuthentication means only a process that can read Tor's cookie file -
+# which lives inside this container - can drive the control port.
+RUN printf '%s\n' \
+    'SocksPort 127.0.0.1:9050' \
+    'ControlPort 127.0.0.1:9051' \
+    'CookieAuthentication 1' \
+    'CookieAuthFile /var/lib/tor/control_auth_cookie' \
+    'DataDirectory /var/lib/tor' \
+    'Log notice file /var/log/tor/notices.log' \
+    'RunAsDaemon 0' \
+    > /etc/tor/torrc && \
     chown nextjs:nodejs /etc/tor/torrc && \
     chmod 644 /etc/tor/torrc
 
@@ -68,6 +78,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENV TOR_CONTROL_PORT=9051
+ENV TOR_SOCKS_PORT=9050
+ENV TOR_CONTROL_COOKIE=/var/lib/tor/control_auth_cookie
 
 # Copy application files
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
@@ -75,33 +88,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/server.js ./
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# Create startup script with better Tor handling
-RUN printf '#!/bin/bash\n\
-    set -e\n\
-    \n\
-    echo "=== Starting Tor daemon ==="\n\
-    # Start Tor and capture output\n\
-    tor -f /etc/tor/torrc &\n\
-    TOR_PID=$!\n\
-    echo "Tor started with PID: $TOR_PID"\n\
-    \n\
-    # Give Tor a moment to initialize\n\
-    sleep 3\n\
-    \n\
-    # Check if Tor is still running\n\
-    if kill -0 $TOR_PID 2>/dev/null; then\n\
-    echo "Tor is running"\n\
-    else\n\
-    echo "WARNING: Tor failed to start. Continuing without Tor."\n\
-    cat /var/log/tor/notices.log 2>/dev/null || echo "No Tor logs available"\n\
-    fi\n\
-    \n\
-    echo "=== Starting Next.js application ==="\n\
-    echo "Binding to ${HOSTNAME}:${PORT}"\n\
-    exec bun run start\n' > /app/start.sh && \
-    chmod +x /app/start.sh && \
-    chown nextjs:nodejs /app/start.sh
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 
 # Switch to non-root user
 USER nextjs
@@ -109,9 +96,11 @@ USER nextjs
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/api/relay || exit 1
+# /api/health answers 200 whenever the process can route, and reports Tor
+# separately in the body - so a Tor outage degrades the report instead of
+# marking a perfectly good relay unhealthy.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT}/api/health" || exit 1
 
-# Start the application
-CMD ["/bin/bash", "/app/start.sh"]
+# Start Tor, wait for its control port, then start the relay
+CMD ["/bin/bash", "/app/scripts/render-start.sh"]

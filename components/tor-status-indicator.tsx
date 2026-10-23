@@ -25,8 +25,9 @@ export function TorStatusIndicator() {
             const interval = setInterval(checkTorStatus, 30000);
             return () => clearInterval(interval);
         } else {
-            // In browser, assume connected if we can fetch
-            setStatus('connected');
+            // In browser, ask the relay. Never assume: an optimistic "connected"
+            // here is what made an unrouted relay look anonymised.
+            setStatus('connecting');
             fetchBrowserIP();
         }
     }, []);

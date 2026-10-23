@@ -122,7 +122,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             <div className="pt-4 border-t border-border">
               <div className="text-center space-y-1">
                 <p className="text-xs text-muted-foreground">AnonChat Client v1.0.0</p>
-                <p className="text-xs text-muted-foreground">Signal Protocol + Tor Network</p>
+                <p className="text-xs text-muted-foreground">X3DH + Double Ratchet, AES-256-GCM</p>
               </div>
             </div>
           </div>
