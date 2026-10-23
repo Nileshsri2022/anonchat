@@ -7,7 +7,9 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [master]
+    # The default branch is `main`. This used to say `master`, which meant the
+    # gates ran on pull requests but never on the mainline itself.
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

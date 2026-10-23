@@ -30,7 +30,7 @@ git commit -m "Release v1.0.0"
 
 # 3. Create and push tag
 git tag v1.0.0
-git push origin master
+git push origin main
 git push origin v1.0.0
 ```
 
@@ -74,7 +74,7 @@ git push origin v1.0.0
 
 1. Go to repo Settings → Pages
 2. Source: "Deploy from a branch"
-3. Branch: `master` → `/docs`
+3. Branch: `main` → `/docs`
 4. Click Save
 
 **Your site will be at:** `https://nileshsri2022.github.io/anonchat/`
