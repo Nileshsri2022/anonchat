@@ -27,7 +27,18 @@ anonchat-relay.onrender.com
 └── /socket.io                           real-time push
 ```
 
-Render builds from `render.yaml` → `Dockerfile.render`.
+Render runs this on its **native Node/Bun runtime**, not Docker. `render.yaml`
+declares that; `Dockerfile.render` is an optional second path, described at the
+bottom of this document.
+
+```text
+build:  bun install --frozen-lockfile && bun run build
+start:  bun run start        # -> server.js
+```
+
+`bun.lock` is in the repo, which is what makes Bun available on Render's native
+runtime — Render includes it automatically when it sees that lockfile.
+`BUN_VERSION` is pinned so deploys don't drift with Render's default.
 
 ---
 
@@ -36,24 +47,36 @@ Render builds from `render.yaml` → `Dockerfile.render`.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NODE_ENV` | `production` | Set by `render.yaml`. |
-| `PORT` | `3000` | Render injects its own; the Dockerfile default is a fallback. |
+| `PORT` | Render injects it | The relay binds to whatever Render provides. Don't set it by hand. |
+| `BUN_VERSION` | `1.4.3` | Pinned so deploys don't drift with Render's default. |
+| `ELECTRON_SKIP_BINARY_DOWNLOAD` | `1` | Skips the ~100MB Electron download during install. Without it, a failed download fails the build. |
 | `ALLOWED_ORIGINS` | *(empty)* | Comma-separated extra socket origins. Empty means "the origin this relay is served on", which is what you want when the app and the relay are the same host. Use `*` only behind your own proxy. |
+
+Render sets `RENDER_EXTERNAL_HOSTNAME` itself; the socket origin check trusts it,
+so no configuration is needed for the normal single-host case.
+
+These only apply on the Docker path, where a Tor daemon exists:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
 | `TOR_CONTROL_PORT` | `9051` | Tor control port, loopback inside the container. |
 | `TOR_SOCKS_PORT` | `9050` | Tor SOCKS port, loopback inside the container. |
 | `TOR_CONTROL_COOKIE` | `/var/lib/tor/control_auth_cookie` | Tor's cookie file. Read to authenticate to the control port. |
 | `TOR_WAIT_SECONDS` | `60` | How long the entrypoint waits for Tor's control port before starting anyway. |
-
-Render sets `RENDER_EXTERNAL_HOSTNAME` itself; the socket origin check trusts it,
-so no configuration is needed for the normal single-host case.
+| `TOR_FASCIST_FIREWALL` | `0` | Set to `1` if Tor starts but never bootstraps: forces Tor onto relays listening on 80/443. |
 
 ---
 
 ## Tor
 
-`Dockerfile.render` installs Tor and `scripts/render-start.sh` starts it, then
-**waits for the control port to accept connections** before handing over to the
-relay. That ordering matters: if the app answers first, its first status
-responses say "no Tor" while a circuit is seconds away.
+**On the native Node runtime there is no Tor, and that is currently fine.** Tor
+is installed by `apt` inside `Dockerfile.render`, so a Node deployment never has
+it. Read the next section before deciding that is a problem.
+
+When the image *does* have Tor, `scripts/render-start.sh` starts it and **waits
+for the control port to accept connections** before handing over to the relay.
+That ordering matters: if the app answers first, its first status responses say
+"no Tor" while a circuit is seconds away.
 
 If Tor never comes up, the entrypoint logs the Tor notices and starts the relay
 anyway. Tor is a capability, not a dependency — but the relay has to report its
@@ -69,7 +92,31 @@ The control port is bound to `127.0.0.1:9051` with `CookieAuthentication 1`, so
 only a process that can read Tor's cookie file — which lives inside the
 container — can drive it.
 
-### Getting Tor working
+### Do you actually need Tor on the relay?
+
+Probably not, and it is worth being blunt about why.
+
+The relay makes **no outbound network requests**. Not one. Every `fetch` in
+`lib/relay-api.ts` and `lib/blob-client.ts` uses a relative URL, which the
+browser resolves against the relay's own origin — those are inbound requests
+from the client, not calls the relay makes. The single method that looks like an
+outbound call, `TorIntegration.fetchThroughTor`, has no callers, and its body
+calls plain `fetch(url, options)` without ever attaching the SOCKS agent.
+
+So a Tor daemon on this relay would have nothing to route. It would exist so the
+UI could display a green shield. That is the exact failure mode the rest of this
+document is written to prevent: reporting anonymity we do not have.
+
+Tor earns its place where the traffic actually is:
+
+- **The desktop client**, which bundles its own Tor daemon and exposes
+  `window.TorAPI.fetch`. Wiring `relayAPI` through that is the change that would
+  make "routed through Tor" true for real messages.
+- **A relay that makes outbound calls** — federation, push, anything server-side.
+
+If you want either, that is a build, not a config toggle.
+
+### Getting Tor working (Docker path only)
 
 Tor has to clear four hurdles. Each one fails differently, and the entrypoint
 tells you which one it was — so read the log before changing anything.
@@ -176,3 +223,28 @@ while every attachment uploaded to an id the client never saw.
 - **Blob storage is unbounded in count** (10 MiB each, 7-day TTL, swept every
   10s). A sustained flood is bounded by the per-client upload rate limit, not by
   total memory. Watch it on a busy relay.
+
+---
+
+## The Docker path (optional)
+
+`Dockerfile.render` is kept for anyone who wants a Tor daemon in the container,
+or full control over the image. It is **not** how the relay is deployed today.
+
+To use it, change `runtime: node` to `runtime: docker` in `render.yaml` and add:
+
+```yaml
+    dockerfilePath: ./Dockerfile.render
+```
+
+You cannot do that from the Render dashboard — [an existing service's runtime is
+only changeable via the API or a blueprint](https://render.com/changelog/change-an-existing-services-runtime-via-api-or-blueprint).
+
+What you gain: `apt install tor`, a loopback control port with cookie
+authentication, and an entrypoint that waits for it.
+
+What you give up: Docker builds are slower than native ones, and you take on the
+image. Note that `HEALTHCHECK` in the Dockerfile is advisory — Render runs its
+own check against `healthCheckPath`.
+
+And what you do **not** gain, per the section above: anonymised user traffic.

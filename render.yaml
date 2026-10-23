@@ -1,32 +1,37 @@
+# This describes how the relay is *actually* deployed: Render's native Node/Bun
+# runtime, no Docker. Keep it in step with the dashboard — a blueprint that
+# disagrees with the running service is a trap for the next person who applies it.
+#
+# Want a Tor daemon in the container? That needs Docker: see the "Docker path"
+# section of docs/RELAY-DEPLOYMENT.md, and read the caveat there first — the
+# relay makes no outbound requests today, so Tor would have nothing to route.
 services:
   - type: web
-    name: anonchat
-    runtime: docker
-    dockerfilePath: ./Dockerfile.render
-    # /api/health answers 200 whenever the process can route; Tor is reported in
-    # the body rather than gating liveness, so a Tor outage cannot take the
-    # relay out of service.
+    # Matches the live service. Get this wrong and a blueprint sync creates a
+    # second service on a different onrender.com hostname.
+    name: anonchat-relay
+    runtime: node
+    # Explicit rather than relying on Render's auto-detection: bun.lock is
+    # present, so Render includes Bun, but pinning the version keeps deploys
+    # reproducible.
+    buildCommand: bun install --frozen-lockfile && bun run build
+    startCommand: bun run start
+    # Answers 200 whenever the process can route; Tor is reported in the body
+    # rather than gating liveness.
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: "3000"
       - key: NEXT_TELEMETRY_DISABLED
         value: "1"
-      - key: TOR_CONTROL_PORT
-        value: "9051"
-      - key: TOR_SOCKS_PORT
-        value: "9050"
-      - key: TOR_CONTROL_COOKIE
-        value: /var/lib/tor/control_auth_cookie
-      # Set to "1" if Tor starts but never finishes bootstrapping: it forces Tor
-      # onto relays listening on 80/443, which survive an egress firewall that
-      # blocks 9001/9030. Costs you most of the guard pool.
-      - key: TOR_FASCIST_FIREWALL
-        value: "0"
-      # Socket origins. Leave empty to allow only the origin this relay is served
-      # on; set it to a comma-separated list when a front end on another host
-      # needs to talk to it.
+      - key: BUN_VERSION
+        value: 1.4.3
+      # Electron is a desktop-only dependency. Its postinstall downloads a ~100MB
+      # binary the relay never runs, and a failed download fails the whole build.
+      - key: ELECTRON_SKIP_BINARY_DOWNLOAD
+        value: "1"
+      # Socket origins. Empty means "the origin this relay is served on", which is
+      # what you want when the app and the relay are one host. Set it to a
+      # comma-separated list when a front end on another host needs to talk to it.
       - key: ALLOWED_ORIGINS
         value: ""
