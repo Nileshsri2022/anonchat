@@ -24,7 +24,8 @@
     "build:mac": "bun run download:tor && bun run build:next && electron-builder --mac",
     "build:linux": "bun run download:tor && bun run build:next && electron-builder --linux",
     "dist": "bun run build:electron",
-    "deadcode": "bun tools/find-dead.ts --check"
+    "deadcode": "bun tools/find-dead.ts --check",
+    "smoke": "node scripts/smoke-relay.mjs"
   },
   "build": {
     "appId": "com.anonchat.app",

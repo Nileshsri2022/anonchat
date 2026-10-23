@@ -95,13 +95,18 @@ describe('Attachment crypto (ticket 20)', () => {
     expect(received.kind).toBe('voice');
     expect(received.durationMs).toBe(4200);
 
-    // a relay-side blob swap (other ciphertext substituted under our reference) fails auth
+    // A relay-side blob swap under our reference is refused outright: an id that
+    // already holds bytes cannot be filled a second time.
     const other = await encryptAttachment(bytes(16), { ...meta, blobId: 'other-id' });
     const swapped = relay.putBlob({ data: other.blobBytes, clientKey: 'alice', blobId: put.blobId });
-    if (!swapped.accepted) throw new Error('swap upload failed');
-    const fetchedSwapped = await relay.getBlob(put.blobId);
+    expect(swapped.accepted).toBe(false);
+
+    // And if a relay did serve substituted bytes anyway, AEAD still fails auth.
+    const smuggled = relay.putBlob({ data: other.blobBytes, clientKey: 'alice' });
+    if (!smuggled.accepted) throw new Error('smuggle upload failed');
+    const fetchedSmuggled = await relay.getBlob(smuggled.blobId);
     await expect(
-      decryptAttachment(fetchedSwapped!.data, received.keyB64, received.ivB64, received),
+      decryptAttachment(fetchedSmuggled!.data, received.keyB64, received.ivB64, received),
     ).rejects.toThrow();
   });
 

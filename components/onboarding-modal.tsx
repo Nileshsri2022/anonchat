@@ -49,7 +49,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
             Welcome to AnonChat
           </h1>
           <p className="text-muted-foreground mb-8">
-            Anonymous, end-to-end encrypted chat, routed through Tor
+            End-to-end encrypted chat. Your keys are generated on this device and never leave it.
           </p>
 
           <div className="text-left max-w-sm mx-auto space-y-4">

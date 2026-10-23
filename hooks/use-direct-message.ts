@@ -5,6 +5,7 @@ import type { Contact } from '@/lib/contact-manager';
 import type { DecryptedMessage, MessageEnvelope } from '@/lib/direct-message-session';
 import { getDmClient } from '@/lib/instances';
 import { isControlPayload } from '@/lib/control-payloads';
+import { envelopeToRelayMessage, relayMessageToEnvelope } from '@/lib/dm-relay';
 import { getOutbox } from '@/lib/outbox';
 import { contactManager } from '@/lib/contact-manager';
 import type { DirectMessageClient } from '@/lib/dm-service';
@@ -65,15 +66,16 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
   const transport = useCallback(async (roomId: string, envelope: MessageEnvelope) => {
     socketService.sendMessage(roomId, envelope);
     try {
-      await relayAPI.sendMessage({
-        id: `${roomId}_${envelope.timestamp}_${Math.random().toString(36).slice(2, 8)}`,
-        roomId,
-        userId: currentUser.id,
-        username: currentUser.username,
-        timestamp: envelope.timestamp,
-        expiresAt: envelope.expiresAt,
-        ...(envelope as unknown as Record<string, unknown>),
-      } as never);
+      // The relay stores opaque ciphertext, not envelope fields: encode the whole
+      // envelope as the body so catch-up polling can hand it back intact.
+      await relayAPI.sendMessage(
+        envelopeToRelayMessage(envelope, {
+          id: `${roomId}_${envelope.timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+          roomId,
+          userId: currentUser.id,
+          username: currentUser.username,
+        }),
+      );
     } catch {
       // Socket push already covers live recipients; the relay buffer is best-effort
     }
@@ -175,9 +177,12 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
           try {
             const buffered = await relayAPI.pollMessages(room, lastSeen.get(room));
             for (const raw of buffered) {
-              if (!isEnvelope(raw)) continue;
-              lastSeen.set(room, `${raw.channelId}:${raw.header.n}:${raw.timestamp}`);
-              await acceptInbound(raw);
+              // The socket hands over the envelope itself; the relay buffer hands
+              // over the Relay Message it was encoded into.
+              const env = isEnvelope(raw) ? raw : relayMessageToEnvelope(raw);
+              if (!env) continue;
+              lastSeen.set(room, `${env.channelId}:${env.header.n}:${env.timestamp}`);
+              await acceptInbound(env);
             }
           } catch {
             // Relay buffer is optional
@@ -189,6 +194,7 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
 
       return () => {
         if (pollTimer) clearInterval(pollTimer);
+        socketService.offMessage('*');
         socketService.leaveRoom(contact.identity.identityPublicKey, currentUser.id);
       };
     }
@@ -197,6 +203,9 @@ export function useDirectMessage(contact: Contact): UseDirectMessageReturn {
 
     return () => {
       active = false;
+      // Unregister the catch-all synchronously: it takes precedence over every
+      // Room handler, so leaving it behind would starve Room traffic.
+      socketService.offMessage('*');
       cleanupPromise.then((cleanup) => {
         if (typeof cleanup === 'function') cleanup();
       });

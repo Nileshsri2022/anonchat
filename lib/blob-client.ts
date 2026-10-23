@@ -34,18 +34,24 @@ export async function reserveBlobId(): Promise<string> {
   return body.blobId;
 }
 
-/** Upload opaque ciphertext; returns the blob id. */
+/**
+ * Upload opaque ciphertext under the id that was reserved for it.
+ *
+ * The id must be the reserved one: it is bound into the attachment's AEAD
+ * additional data before encrypting, so uploading anywhere else would store the
+ * bytes under an id the message never references (ADR-0009).
+ */
 export async function uploadBlob(data: Uint8Array, blobId: string): Promise<string> {
   const resp = await check(
-    await fetch('/api/relay/blobs', {
-      method: 'POST',
+    await fetch(`/api/relay/blobs/${blobId}`, {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: data as unknown as BodyInit,
     }),
     'upload failed',
   );
   const body = (await resp.json()) as { blobId: string };
-  return blobId || body.blobId;
+  return body.blobId || blobId;
 }
 
 /** Download the opaque blob for decryption; null when expired/gone (honest absence). */

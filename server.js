@@ -19,28 +19,63 @@ app.prepare().then(() => {
         handle(req, res, parsedUrl);
     });
 
-    // Attach Socket.IO to the HTTP server
+    // Attach Socket.IO to the HTTP server.
+    //
+    // Socket origins are held to the same rule the REST routes enforce: this
+    // relay serves one origin. Widening it is a deliberate, explicit act — set
+    // ALLOWED_ORIGINS to a comma-separated list of origins (or '*' to disable the
+    // check entirely, which you should only do behind your own proxy).
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+    if (allowedOrigins.length > 0) {
+        console.log('> Socket origins allowed:', allowedOrigins.join(', '));
+    }
+
+    // Strip a scheme so `ALLOWED_ORIGINS=https://app.example.com` and
+    // `ALLOWED_ORIGINS=app.example.com` mean the same thing.
+    function hostOf(value) {
+        try {
+            return new URL(value.includes('://') ? value : `https://${value}`).host.toLowerCase();
+        } catch {
+            return '';
+        }
+    }
+
+    const renderHost = hostOf(process.env.RENDER_EXTERNAL_HOSTNAME || '');
+
+    // The policy lives in allowRequest rather than in `cors.origin`, because only
+    // here can the Origin be compared against the Host this relay is actually
+    // being served on. Browsers send an Origin on WebSocket handshakes even for
+    // same-origin requests, so a rule that cannot see the serving host breaks the
+    // relay's own front end behind any proxy that rewrites Host.
+    function originAllowed(req) {
+        const origin = req.headers?.origin;
+        if (!origin) return true; // not a browser CORS request
+        if (allowedOrigins.includes('*')) return true;
+
+        const originHost = hostOf(origin);
+        if (!originHost) return false;
+        if (allowedOrigins.some((allowed) => hostOf(allowed) === originHost)) return true;
+        // Same-origin as the relay itself, whatever proxy is in front of it.
+        if (originHost === (req.headers?.host || '').toLowerCase()) return true;
+        if (renderHost && originHost === renderHost) return true;
+        return false;
+    }
+
     const io = new SocketIOServer(server, {
         path: '/socket.io',
         cors: {
-            // Same-origin only: reflect the request origin when it matches the serving host.
-            // Cross-origin socket clients are rejected (ticket 07).
-            origin: (origin, cb) => {
-                if (!origin) return cb(null, true);
-                try {
-                    const { host } = new URL(origin);
-                    const allowed = process.env.ALLOWED_ORIGINS
-                        ? process.env.ALLOWED_ORIGINS.split(',')
-                        : [];
-                    if (allowed.includes('*') || allowed.includes(origin)) return cb(null, true);
-                    if (host === 'gupt-wheat.vercel.app' || host.endsWith('.vercel.app')) return cb(null, true);
-                    if (host === (process.env.HOSTNAME || '')) return cb(null, true);
-                    return cb(null, false);
-                } catch {
-                    return cb(null, false);
-                }
-            },
+            origin: (origin, cb) => cb(null, true),
             methods: ['GET', 'POST'],
+            credentials: true,
+        },
+        allowRequest: (req, cb) => {
+            if (originAllowed(req)) return cb(null, true);
+            console.warn('[relay] socket origin rejected:', req.headers?.origin);
+            return cb('Origin not allowed', false);
         },
     });
 

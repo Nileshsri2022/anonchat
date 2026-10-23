@@ -1,8 +1,37 @@
+# This describes how the relay is *actually* deployed: Render's native Node/Bun
+# runtime, no Docker. Keep it in step with the dashboard — a blueprint that
+# disagrees with the running service is a trap for the next person who applies it.
+#
+# Want a Tor daemon in the container? That needs Docker: see the "Docker path"
+# section of docs/RELAY-DEPLOYMENT.md, and read the caveat there first — the
+# relay makes no outbound requests today, so Tor would have nothing to route.
 services:
   - type: web
-    name: anonchat
-    runtime: docker
-    dockerfilePath: ./Dockerfile.render
+    # Matches the live service. Get this wrong and a blueprint sync creates a
+    # second service on a different onrender.com hostname.
+    name: anonchat-relay
+    runtime: node
+    # Explicit rather than relying on Render's auto-detection: bun.lock is
+    # present, so Render includes Bun, but pinning the version keeps deploys
+    # reproducible.
+    buildCommand: bun install --frozen-lockfile && bun run build
+    startCommand: bun run start
+    # Answers 200 whenever the process can route; Tor is reported in the body
+    # rather than gating liveness.
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: BUN_VERSION
+        value: 1.4.3
+      # Electron is a desktop-only dependency. Its postinstall downloads a ~100MB
+      # binary the relay never runs, and a failed download fails the whole build.
+      - key: ELECTRON_SKIP_BINARY_DOWNLOAD
+        value: "1"
+      # Socket origins. Empty means "the origin this relay is served on", which is
+      # what you want when the app and the relay are one host. Set it to a
+      # comma-separated list when a front end on another host needs to talk to it.
+      - key: ALLOWED_ORIGINS
+        value: ""
