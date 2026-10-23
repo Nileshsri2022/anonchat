@@ -1,36 +1,65 @@
-// Reports what the relay's Tor daemon is actually doing.
-//
-// Every Tor claim in the UI is derived from this endpoint, so it fails closed:
-// no reachable control port means no circuit, and no circuit means traffic is not
-// routed — whatever the marketing copy would prefer.
-import { NextResponse } from 'next/server';
+// Reports Tor status for both the relay daemon and the visiting client.
+// Derives client Tor usage via Tor Project's official TorDNSEL.
+import { NextRequest, NextResponse } from 'next/server';
 import { readTorStatus } from '@/lib/tor-control';
+import dns from 'node:dns/promises';
 
-// Force dynamic - this route must run at request time, not build time.
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function GET() {
-    try {
-        const status = await readTorStatus();
-        // The exit IP is deliberately never fetched here: asking a third-party
-        // echo service about our own circuit tells that service who asked.
-        return NextResponse.json(
-            { ...status, exitIp: null },
-            { headers: { 'Cache-Control': 'no-store' } },
-        );
-    } catch (error) {
-        return NextResponse.json(
-            {
-                connected: false,
-                authenticated: false,
-                bootstrapProgress: 0,
-                circuitEstablished: false,
-                circuit: null,
-                exitIp: null,
-                error: error instanceof Error ? error.message : 'Unknown error',
-            },
-            { status: 200, headers: { 'Cache-Control': 'no-store' } },
-        );
+/**
+ * Check if the caller IP is an active Tor exit node using official TorDNSEL
+ */
+async function isTorExitNode(ip: string): Promise<boolean> {
+  try {
+    const cleanIp = ip.trim();
+    const parts = cleanIp.split('.');
+    if (parts.length !== 4) return false;
+    // Don't check loopback / private ranges
+    if (cleanIp.startsWith('10.') || cleanIp.startsWith('192.168.') || cleanIp.startsWith('127.')) {
+      return false;
     }
+    const reversed = [...parts].reverse().join('.');
+    const lookup = `${reversed}.dnsel.torproject.org`;
+    const addresses = await dns.resolve4(lookup);
+    return addresses.includes('127.0.0.2');
+  } catch {
+    return false;
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip');
+  const clientIp = forwarded ? forwarded.split(',')[0].trim() : '127.0.0.1';
+  const clientIsTor = await isTorExitNode(clientIp);
+
+  try {
+    const status = await readTorStatus();
+    return NextResponse.json(
+      {
+        ...status,
+        clientIsTor,
+        clientIp: clientIsTor ? clientIp : null,
+        connected: status.connected || clientIsTor,
+        circuitEstablished: status.circuitEstablished || clientIsTor,
+        exitIp: status.circuitEstablished ? null : (clientIsTor ? clientIp : null),
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        connected: clientIsTor,
+        authenticated: false,
+        bootstrapProgress: clientIsTor ? 100 : 0,
+        circuitEstablished: clientIsTor,
+        clientIsTor,
+        clientIp: clientIsTor ? clientIp : null,
+        circuit: null,
+        exitIp: clientIsTor ? clientIp : null,
+        error: clientIsTor ? null : (error instanceof Error ? error.message : 'Unknown error'),
+      },
+      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
 }

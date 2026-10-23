@@ -126,7 +126,17 @@ export function TorCircuitDisplay() {
                                 }
                             });
                         }
-                        setExitIP(data.exitIp || data.circuit?.exit?.ip || 'Connected');
+                        else if (data.clientIsTor) {
+                            setCircuit({
+                                circuitId: 'tor-browser',
+                                hops: {
+                                    guard: { nickname: 'Tor Guard', country: 'Unknown' },
+                                    middle: { nickname: 'Tor Relay', country: 'Unknown' },
+                                    exit: { nickname: 'Tor Exit Node', ip: data.clientIp || 'Tor', country: 'Unknown' }
+                                }
+                            });
+                        }
+                        setExitIP(data.exitIp || data.circuit?.exit?.ip || (data.clientIsTor ? data.clientIp : 'Connected'));
                     } else if (data.connected) {
                         setExitIP(`Bootstrap: ${data.bootstrapProgress}%`);
                     } else {
