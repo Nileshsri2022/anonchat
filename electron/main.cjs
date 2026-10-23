@@ -125,7 +125,7 @@ async function getCircuitInfo() {
     }
 
     if (!circuitLine) {
-      console.log('❌ No BUILT circuit found');
+      console.log('⏳ Tor is building 3-hop circuits (bootstrap in progress)...');
       return null;
     }
 
@@ -513,6 +513,48 @@ app.whenReady().then(async () => {
       console.error('❌ Failed to request new circuit:', error.message);
       return false;
     }
+  });
+
+  // Track whether Tor proxy routing is active on session
+  let torProxyActive = true;
+
+  // IPC handler for querying bootstrap progress
+  ipcMain.handle('get-tor-bootstrap', async () => {
+    try {
+      const resp = await sendTorCommand('GETINFO status/bootstrap-phase');
+      const match = resp.match(/PROGRESS=(\d+)/);
+      const tagMatch = resp.match(/SUMMARY="([^"]+)"/);
+      return {
+        progress: match ? parseInt(match[1], 10) : 100,
+        summary: tagMatch ? tagMatch[1] : 'Ready'
+      };
+    } catch {
+      return { progress: 0, summary: 'Offline' };
+    }
+  });
+
+  // IPC handler for toggling Tor proxy routing on session
+  ipcMain.handle('set-tor-proxy', async (event, enabled) => {
+    try {
+      if (enabled) {
+        await session.defaultSession.setProxy({ proxyRules: 'socks5://127.0.0.1:9050' });
+        torProxyActive = true;
+        console.log('✅ Tor proxy enforced: ALL application messages route through Tor');
+      } else {
+        await session.defaultSession.setProxy({ proxyRules: '' });
+        torProxyActive = false;
+        console.log('⚠️ Tor proxy disabled: Application using direct internet');
+      }
+      return true;
+    } catch (e) {
+      console.error('Failed to change proxy:', e.message);
+      return false;
+    }
+  });
+
+  // IPC handler for getting current Tor proxy status
+  ipcMain.handle('get-tor-proxy-status', async () => {
+    return torProxyActive;
   });
 
   // Create window after Tor is ready

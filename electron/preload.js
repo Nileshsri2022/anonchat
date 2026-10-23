@@ -9,5 +9,14 @@ contextBridge.exposeInMainWorld('TorAPI', {
     getTorCircuit: () => ipcRenderer.invoke('get-tor-circuit'),
 
     // Request new Tor circuit (NEWNYM)
-    newTorCircuit: () => ipcRenderer.invoke('new-tor-circuit')
+    newTorCircuit: () => ipcRenderer.invoke('new-tor-circuit'),
+
+    // Get bootstrap progress (e.g., 62%, 100%)
+    getTorBootstrap: () => ipcRenderer.invoke('get-tor-bootstrap'),
+
+    // Toggle Tor proxy routing on session
+    setTorProxy: (enabled) => ipcRenderer.invoke('set-tor-proxy', enabled),
+
+    // Check if Tor proxy is currently active on session
+    getTorProxyStatus: () => ipcRenderer.invoke('get-tor-proxy-status')
 });

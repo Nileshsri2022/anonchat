@@ -22,6 +22,9 @@ export interface TorAPI {
   getTorCircuit(): Promise<TorCircuitInfo | null>;
   /** Request a fresh circuit (NEWNYM); resolves with success. */
   newTorCircuit(): Promise<boolean>;
+  getTorBootstrap?(): Promise<{ progress: number; summary: string }>;
+  setTorProxy?(enabled: boolean): Promise<boolean>;
+  getTorProxyStatus?(): Promise<boolean>;
 }
 
 declare global {

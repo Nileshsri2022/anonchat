@@ -7,6 +7,7 @@ import { X, Trash2, Download, Shield, Bell, Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { ProfilePassphraseSettings } from '@/components/profile-passphrase-settings';
 import { DisplayNameSetting } from '@/components/display-name-setting';
+import { TorSettings } from '@/components/tor-settings';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -67,6 +68,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 </div>
               </div>
             </div>
+
+            {/* Tor Network & Traffic Routing */}
+            <TorSettings />
 
             {/* Notifications Section */}
             <div className="space-y-4">
