@@ -90,7 +90,7 @@ anonchat/
 
 ### Before Submitting
 
-1. **Create a branch** from `master`:
+1. **Create a branch** from `main`:
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -138,7 +138,7 @@ security: upgrade crypto dependencies
    git push origin feature/your-feature-name
    ```
 
-2. Open a Pull Request against `master`
+2. Open a Pull Request against `main`
 
 3. Fill out the PR template with:
    - Description of changes
