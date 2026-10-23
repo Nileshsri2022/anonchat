@@ -20,6 +20,11 @@ services:
         value: "9050"
       - key: TOR_CONTROL_COOKIE
         value: /var/lib/tor/control_auth_cookie
+      # Set to "1" if Tor starts but never finishes bootstrapping: it forces Tor
+      # onto relays listening on 80/443, which survive an egress firewall that
+      # blocks 9001/9030. Costs you most of the guard pool.
+      - key: TOR_FASCIST_FIREWALL
+        value: "0"
       # Socket origins. Leave empty to allow only the origin this relay is served
       # on; set it to a comma-separated list when a front end on another host
       # needs to talk to it.

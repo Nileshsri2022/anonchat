@@ -25,7 +25,21 @@ start_tor() {
   if ! command -v tor >/dev/null 2>&1; then
     log "Tor is NOT INSTALLED in this image - starting without it."
     log "The relay will run, and will honestly report that it is not routing."
+    log "If this service is on a native runtime (Node), it has no Tor: Render"
+    log "cannot switch an existing service to Docker from the dashboard."
     return 1
+  fi
+
+  # A PaaS egress firewall may block the non-web ports Tor normally uses for
+  # relays (9001, 9030). FascistFirewall restricts Tor to relays listening on 80
+  # and 443, which almost nothing blocks. It shrinks the guard pool, so it is
+  # opt-in - but reachable from the dashboard, without a rebuild.
+  if [ "${TOR_FASCIST_FIREWALL:-0}" = "1" ]; then
+    if ( printf '%s\n' 'FascistFirewall 1' >> /etc/tor/torrc ) 2>/dev/null; then
+      log "TOR_FASCIST_FIREWALL=1 — restricted Tor to relays on ports 80 and 443."
+    else
+      log "TOR_FASCIST_FIREWALL=1 was set but /etc/tor/torrc is not writable here; ignoring."
+    fi
   fi
 
   log "Starting Tor daemon (control ${CONTROL_HOST}:${CONTROL_PORT}, socks ${CONTROL_HOST}:${SOCKS_PORT})"
